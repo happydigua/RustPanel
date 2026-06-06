@@ -10,6 +10,17 @@ pub(crate) struct UpdateCheckResult {
     pub(crate) update_command: String,
 }
 
+impl UpdateCheckResult {
+    pub(crate) fn empty() -> Self {
+        Self {
+            status: String::new(),
+            status_class: "idle".to_owned(),
+            output: String::new(),
+            update_command: "sudo rustpanel update".to_owned(),
+        }
+    }
+}
+
 pub(crate) async fn run_update_check(language: Language) -> UpdateCheckResult {
     let output = Command::new("rustpanel").arg("update-check").output().await;
 
