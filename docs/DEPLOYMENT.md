@@ -10,7 +10,15 @@ curl -fsSL https://raw.githubusercontent.com/happydigua/RustPanel/main/scripts/b
 
 This installs build dependencies, Rust, Nginx, certbot, clones the repository to
 `/opt/rustpanel-src`, builds release binaries, installs them into
-`/usr/local/bin`, and enables `rustpaneld`.
+`/usr/local/bin`, enables `rustpaneld`, and prints a server-IP based URL:
+
+```text
+Access URL: http://SERVER_IP:7654/rp-a13f9c2d8e4b7a90
+```
+
+If the page does not open, allow TCP `7654` in the cloud firewall/security
+group. The random path is generated during install, saved in
+`/etc/rustpanel/rustpanel.env`, and reused during upgrades.
 
 Use minimal mode when you do not want RustPanel to install Nginx/certbot:
 
@@ -18,13 +26,20 @@ Use minimal mode when you do not want RustPanel to install Nginx/certbot:
 curl -fsSL https://raw.githubusercontent.com/happydigua/RustPanel/main/scripts/bootstrap-linux.sh | sudo bash -s -- --minimal
 ```
 
-RustPanel listens on `127.0.0.1:7654` by default.
+Use local-only mode when you want SSH tunnel access instead of direct server-IP
+access:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/happydigua/RustPanel/main/scripts/bootstrap-linux.sh | sudo bash -s -- --local
+```
+
+Then connect from your computer:
 
 ```bash
 ssh -L 7654:127.0.0.1:7654 root@SERVER_IP
 ```
 
-Then open:
+And open:
 
 ```text
 http://127.0.0.1:7654
@@ -63,6 +78,9 @@ sudo env "PATH=$PATH" scripts/install-linux.sh --with-nginx
 ```bash
 systemctl status rustpaneld --no-pager
 journalctl -u rustpaneld -f
+rustpanel version
+rustpanel update-check
+sudo rustpanel update
 rustpanel render-sample
 rustpanel-helper contract
 ```

@@ -5,6 +5,7 @@ REPO_URL="${RUSTPANEL_REPO_URL:-https://github.com/happydigua/RustPanel.git}"
 BRANCH="${RUSTPANEL_BRANCH:-main}"
 INSTALL_DIR="${RUSTPANEL_SOURCE_DIR:-/opt/rustpanel-src}"
 WITH_NGINX=1
+PUBLIC_ACCESS=1
 
 for arg in "$@"; do
     case "$arg" in
@@ -14,9 +15,16 @@ for arg in "$@"; do
         --with-nginx)
             WITH_NGINX=1
             ;;
+        --public)
+            PUBLIC_ACCESS=1
+            ;;
+        --local)
+            PUBLIC_ACCESS=0
+            ;;
         --help|-h)
             echo "Usage: curl -fsSL https://raw.githubusercontent.com/happydigua/RustPanel/main/scripts/bootstrap-linux.sh | sudo bash"
             echo "       curl -fsSL https://raw.githubusercontent.com/happydigua/RustPanel/main/scripts/bootstrap-linux.sh | sudo bash -s -- --minimal"
+            echo "       curl -fsSL https://raw.githubusercontent.com/happydigua/RustPanel/main/scripts/bootstrap-linux.sh | sudo bash -s -- --local"
             exit 0
             ;;
         *)
@@ -83,8 +91,16 @@ sync_source
 
 cd "$INSTALL_DIR"
 
+install_args=()
+
 if [ "$WITH_NGINX" -eq 1 ]; then
-    env "PATH=$PATH" scripts/install-linux.sh --with-nginx
-else
-    env "PATH=$PATH" scripts/install-linux.sh
+    install_args+=(--with-nginx)
 fi
+
+if [ "$PUBLIC_ACCESS" -eq 1 ]; then
+    install_args+=(--public)
+else
+    install_args+=(--local)
+fi
+
+env "PATH=$PATH" scripts/install-linux.sh "${install_args[@]}"

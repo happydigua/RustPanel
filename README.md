@@ -30,21 +30,30 @@ crates/rustpanel-cli      CLI for setup, preview, and diagnostics
 curl -fsSL https://raw.githubusercontent.com/happydigua/RustPanel/main/scripts/bootstrap-linux.sh | sudo bash
 ```
 
-RustPanel listens on `127.0.0.1:7654` by default. Open it through an SSH
-tunnel:
+The installer prints a server-IP based access URL:
 
-```bash
-ssh -L 7654:127.0.0.1:7654 root@SERVER_IP
+```text
+Access URL: http://SERVER_IP:7654/rp-a13f9c2d8e4b7a90
 ```
 
-Then visit `http://127.0.0.1:7654`.
+If the page does not open, allow TCP `7654` in the cloud firewall/security
+group. The random path is generated during install and reused during upgrades.
+Public mode is still for early debugging until real authentication is added.
+
+For local-only install:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/happydigua/RustPanel/main/scripts/bootstrap-linux.sh | sudo bash -s -- --local
+```
 
 ## First vertical slice
 
 ```bash
 cargo test
 cargo run -p rustpanel -- render-sample
+cargo run -p rustpanel -- version
+cargo run -p rustpanel -- update-check --source-dir .
 cargo run -p rustpaneld
 ```
 
-The daemon listens on `127.0.0.1:7654` by default.
+The daemon listens on `127.0.0.1:7654` when run locally with `cargo run`.

@@ -1,6 +1,6 @@
 use std::{net::SocketAddr, sync::Arc};
 
-use anyhow::Context;
+use anyhow::{Context, bail};
 use askama::Template;
 use axum::{
     Json, Router,
@@ -20,6 +20,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 struct AppState {
     apps: Arc<Vec<AppSpec>>,
     paths: PanelPaths,
+    base_path: String,
 }
 
 #[derive(Clone)]
@@ -248,7 +249,7 @@ struct AppRow {
                     <h1>Applications</h1>
                     <div class="muted">Managed Nginx config: <code>{{ nginx_conf_dir }}</code></div>
                 </div>
-                <a class="button" href="/apps">Open list</a>
+                <a class="button" href="{{ apps_path }}">Open list</a>
             </div>
             <table>
                 <thead>
@@ -284,6 +285,7 @@ struct DashboardTemplate {
     app_count: usize,
     domain_count: usize,
     nginx_conf_dir: String,
+    apps_path: String,
 }
 
 #[derive(Template)]
@@ -336,21 +338,31 @@ async fn main() -> anyhow::Result<()> {
         .unwrap_or_else(|_| "127.0.0.1:7654".to_owned())
         .parse::<SocketAddr>()
         .context("RUSTPANEL_BIND must be a socket address")?;
+    let base_path = base_path_from_env()?;
 
     let state = AppState {
         apps: Arc::new(vec![AppSpec::sample()]),
         paths: PanelPaths::default(),
+        base_path: base_path.clone(),
     };
 
-    let app = Router::new()
+    let panel_routes = Router::new()
         .route("/", get(dashboard))
         .route("/apps", get(apps_partial))
-        .route("/healthz", get(healthz))
-        .with_state(state)
-        .layer(TraceLayer::new_for_http());
+        .route("/healthz", get(healthz));
+
+    let app = if base_path == "/" {
+        panel_routes
+    } else {
+        Router::new()
+            .nest(&base_path, panel_routes)
+            .route("/healthz", get(healthz))
+    }
+    .with_state(state)
+    .layer(TraceLayer::new_for_http());
 
     let listener = TcpListener::bind(addr).await?;
-    tracing::info!(%addr, "rustpaneld listening");
+    tracing::info!(%addr, %base_path, "rustpaneld listening");
 
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())
@@ -365,6 +377,7 @@ async fn dashboard(State(state): State<AppState>) -> impl IntoResponse {
         app_count: state.apps.len(),
         domain_count: state.apps.iter().map(|app| app.domains.len()).sum(),
         nginx_conf_dir: state.paths.nginx_conf_dir.display().to_string(),
+        apps_path: scoped_path(&state.base_path, "/apps"),
     })
 }
 
@@ -399,6 +412,62 @@ fn app_rows(apps: &[AppSpec]) -> Vec<AppRow> {
             deploy_step_count: app.deploy.steps.len(),
         })
         .collect()
+}
+
+fn base_path_from_env() -> anyhow::Result<String> {
+    let raw = std::env::var("RUSTPANEL_BASE_PATH").unwrap_or_else(|_| "/".to_owned());
+    normalize_base_path(&raw)
+}
+
+fn normalize_base_path(raw: &str) -> anyhow::Result<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() || trimmed == "/" {
+        return Ok("/".to_owned());
+    }
+
+    let with_slash = format!("/{}", trimmed.trim_matches('/'));
+    if !with_slash
+        .bytes()
+        .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'/' | b'-' | b'_'))
+    {
+        bail!(
+            "RUSTPANEL_BASE_PATH may only contain letters, numbers, slash, hyphen, and underscore"
+        );
+    }
+
+    Ok(with_slash)
+}
+
+fn scoped_path(base_path: &str, path: &str) -> String {
+    if base_path == "/" {
+        return path.to_owned();
+    }
+
+    format!("{base_path}{path}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalizes_base_path() {
+        assert_eq!(normalize_base_path("rp-secret").unwrap(), "/rp-secret");
+        assert_eq!(normalize_base_path("/rp-secret/").unwrap(), "/rp-secret");
+        assert_eq!(normalize_base_path("/").unwrap(), "/");
+    }
+
+    #[test]
+    fn rejects_unsafe_base_path() {
+        assert!(normalize_base_path("/rp secret").is_err());
+        assert!(normalize_base_path("/rp.secret").is_err());
+    }
+
+    #[test]
+    fn scopes_child_paths() {
+        assert_eq!(scoped_path("/", "/apps"), "/apps");
+        assert_eq!(scoped_path("/rp-secret", "/apps"), "/rp-secret/apps");
+    }
 }
 
 async fn shutdown_signal() {
