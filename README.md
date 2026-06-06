@@ -30,7 +30,7 @@ crates/rustpanel-cli      CLI for setup, preview, and diagnostics
 ## One-command server install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/happydigua/RustPanel/main/scripts/bootstrap-linux.sh | sudo bash
+curl -fL --connect-timeout 15 --max-time 120 https://raw.githubusercontent.com/happydigua/RustPanel/main/scripts/bootstrap-linux.sh -o /tmp/rustpanel-bootstrap-linux.sh && sudo bash /tmp/rustpanel-bootstrap-linux.sh
 ```
 
 The installer prints a server-IP based access URL:
@@ -52,7 +52,7 @@ Rust or run a Rust compiler on the server.
 For local-only install:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/happydigua/RustPanel/main/scripts/bootstrap-linux.sh | sudo bash -s -- --local
+curl -fL --connect-timeout 15 --max-time 120 https://raw.githubusercontent.com/happydigua/RustPanel/main/scripts/bootstrap-linux.sh -o /tmp/rustpanel-bootstrap-linux.sh && sudo bash /tmp/rustpanel-bootstrap-linux.sh --local
 ```
 
 ## First vertical slice

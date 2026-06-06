@@ -9,6 +9,10 @@ RUSTPANEL_ADMIN_USER="${RUSTPANEL_ADMIN_USER:-}"
 RUSTPANEL_ADMIN_PASSWORD="${RUSTPANEL_ADMIN_PASSWORD:-}"
 RUSTPANEL_SESSION_SECRET="${RUSTPANEL_SESSION_SECRET:-}"
 
+log() {
+    printf '[RustPanel] %s\n' "$*"
+}
+
 for arg in "$@"; do
     case "$arg" in
         --with-nginx)
@@ -43,16 +47,19 @@ fi
 
 install_nginx() {
     if command -v nginx >/dev/null 2>&1; then
+        log "Nginx is already installed"
         return
     fi
 
     if command -v apt-get >/dev/null 2>&1; then
+        log "Installing Nginx and certbot with apt"
         apt-get update
         apt-get install -y nginx certbot
         return
     fi
 
     if command -v dnf >/dev/null 2>&1; then
+        log "Installing Nginx and certbot with dnf"
         dnf install -y nginx certbot
         return
     fi
@@ -350,16 +357,20 @@ RUSTPANEL_BIND="$(load_or_create_bind)"
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_dir"
 
+log "Building RustPanel from source"
 cargo build --release
 
+log "Installing RustPanel binaries into /usr/local/bin"
 install -m 0755 target/release/rustpaneld /usr/local/bin/rustpaneld
 install -m 0755 target/release/rustpanel /usr/local/bin/rustpanel
 install -m 0755 target/release/rustpanel-helper /usr/local/bin/rustpanel-helper
 
 if ! id rustpanel >/dev/null 2>&1; then
+    log "Creating rustpanel system user"
     useradd --system --home-dir /var/lib/rustpanel --shell /usr/sbin/nologin rustpanel
 fi
 
+log "Creating RustPanel directories"
 install -d -o rustpanel -g rustpanel -m 0750 /var/lib/rustpanel
 install -d -o rustpanel -g rustpanel -m 0750 /var/log/rustpanel
 install -d -o rustpanel -g rustpanel -m 0750 /var/lib/rustpanel/acme
@@ -371,6 +382,7 @@ RUSTPANEL_ADMIN_USER="$(load_or_create_admin_user)"
 RUSTPANEL_ADMIN_PASSWORD="$(load_or_create_admin_password)"
 RUSTPANEL_SESSION_SECRET="$(load_or_create_session_secret)"
 
+log "Writing /etc/rustpanel/rustpanel.env"
 cat >/etc/rustpanel/rustpanel.env <<ENV
 RUSTPANEL_BIND=${RUSTPANEL_BIND}
 RUSTPANEL_BASE_PATH=${RUSTPANEL_BASE_PATH}
@@ -385,6 +397,7 @@ if [ -d /etc/nginx/conf.d ]; then
     install -d -o root -g root -m 0755 /etc/nginx/conf.d/rustpanel
 fi
 
+log "Writing systemd unit"
 cat >/etc/systemd/system/rustpaneld.service <<UNIT
 [Unit]
 Description=RustPanel web daemon
@@ -409,6 +422,7 @@ ReadWritePaths=/var/lib/rustpanel /var/log/rustpanel /etc/rustpanel
 WantedBy=multi-user.target
 UNIT
 
+log "Starting rustpaneld"
 systemctl daemon-reload
 systemctl enable --now rustpaneld
 
