@@ -33,12 +33,13 @@ curl -fsSL https://raw.githubusercontent.com/happydigua/RustPanel/main/scripts/b
 The installer prints a server-IP based access URL:
 
 ```text
-Access URL: http://SERVER_IP:7654/rp-a13f9c2d8e4b7a90
+Access URL: http://SERVER_IP:28437/rp-a13f9c2d8e4b7a90
 ```
 
-If the page does not open, allow TCP `7654` in the cloud firewall/security
-group. The random path is generated during install and reused during upgrades.
-Public mode is still for early debugging until real authentication is added.
+The port and path are both generated during install and reused during upgrades.
+If the page does not open, allow the printed TCP port in the cloud
+firewall/security group. Public mode is still for early debugging until real
+authentication is added.
 
 For local-only install:
 

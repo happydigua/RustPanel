@@ -13,12 +13,12 @@ This installs build dependencies, Rust, Nginx, certbot, clones the repository to
 `/usr/local/bin`, enables `rustpaneld`, and prints a server-IP based URL:
 
 ```text
-Access URL: http://SERVER_IP:7654/rp-a13f9c2d8e4b7a90
+Access URL: http://SERVER_IP:28437/rp-a13f9c2d8e4b7a90
 ```
 
-If the page does not open, allow TCP `7654` in the cloud firewall/security
-group. The random path is generated during install, saved in
-`/etc/rustpanel/rustpanel.env`, and reused during upgrades.
+The port and path are generated during install, saved in
+`/etc/rustpanel/rustpanel.env`, and reused during upgrades. If the page does not
+open, allow the printed TCP port in the cloud firewall/security group.
 
 Use minimal mode when you do not want RustPanel to install Nginx/certbot:
 
@@ -36,13 +36,13 @@ curl -fsSL https://raw.githubusercontent.com/happydigua/RustPanel/main/scripts/b
 Then connect from your computer:
 
 ```bash
-ssh -L 7654:127.0.0.1:7654 root@SERVER_IP
+ssh -L PORT:127.0.0.1:PORT root@SERVER_IP
 ```
 
 And open:
 
 ```text
-http://127.0.0.1:7654
+http://127.0.0.1:PORT/rp-a13f9c2d8e4b7a90
 ```
 
 ## Manual prerequisites

@@ -28,14 +28,6 @@ for arg in "$@"; do
     esac
 done
 
-if [ -z "$RUSTPANEL_BIND" ]; then
-    if [ "$PUBLIC_ACCESS" -eq 1 ]; then
-        RUSTPANEL_BIND="0.0.0.0:7654"
-    else
-        RUSTPANEL_BIND="127.0.0.1:7654"
-    fi
-fi
-
 if [ "$(id -u)" -ne 0 ]; then
     echo "run this installer with sudo" >&2
     exit 1
@@ -64,6 +56,84 @@ install_nginx() {
 
     echo "unsupported package manager; install nginx and certbot manually" >&2
     exit 1
+}
+
+port_is_available() {
+    port="$1"
+
+    if command -v ss >/dev/null 2>&1; then
+        if ss -ltn | awk '{ print $4 }' | grep -Eq "[:.]${port}$"; then
+            return 1
+        fi
+        return 0
+    fi
+
+    if command -v netstat >/dev/null 2>&1; then
+        if netstat -ltn | awk '{ print $4 }' | grep -Eq "[:.]${port}$"; then
+            return 1
+        fi
+        return 0
+    fi
+
+    return 0
+}
+
+random_port_candidate() {
+    if command -v shuf >/dev/null 2>&1; then
+        shuf -i 20000-49999 -n 1
+        return
+    fi
+
+    if command -v od >/dev/null 2>&1; then
+        number="$(od -An -N2 -tu2 /dev/urandom | tr -d ' ')"
+        echo $((20000 + number % 30000))
+        return
+    fi
+
+    echo $((20000 + $(date +%s) % 30000))
+}
+
+generate_bind_port() {
+    attempt=0
+
+    while [ "$attempt" -lt 50 ]; do
+        attempt=$((attempt + 1))
+        port="$(random_port_candidate)"
+
+        if port_is_available "$port"; then
+            echo "$port"
+            return
+        fi
+    done
+
+    echo "could not find an available random port" >&2
+    exit 1
+}
+
+load_existing_bind() {
+    if [ -f /etc/rustpanel/rustpanel.env ]; then
+        awk -F= '/^RUSTPANEL_BIND=/{ print $2; exit }' /etc/rustpanel/rustpanel.env
+    fi
+}
+
+load_or_create_bind() {
+    if [ -n "$RUSTPANEL_BIND" ]; then
+        echo "$RUSTPANEL_BIND"
+        return
+    fi
+
+    existing_bind="$(load_existing_bind)"
+    if [ -n "$existing_bind" ]; then
+        echo "$existing_bind"
+        return
+    fi
+
+    port="$(generate_bind_port)"
+    if [ "$PUBLIC_ACCESS" -eq 1 ]; then
+        echo "0.0.0.0:${port}"
+    else
+        echo "127.0.0.1:${port}"
+    fi
 }
 
 detect_access_host() {
@@ -187,6 +257,8 @@ if [ "$WITH_NGINX" -eq 1 ]; then
     install_nginx
     systemctl enable --now nginx
 fi
+
+RUSTPANEL_BIND="$(load_or_create_bind)"
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_dir"
