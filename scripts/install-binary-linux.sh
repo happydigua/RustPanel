@@ -5,6 +5,9 @@ WITH_NGINX=0
 PUBLIC_ACCESS=0
 RUSTPANEL_BIND="${RUSTPANEL_BIND:-}"
 RUSTPANEL_BASE_PATH="${RUSTPANEL_BASE_PATH:-}"
+RUSTPANEL_ADMIN_USER="${RUSTPANEL_ADMIN_USER:-}"
+RUSTPANEL_ADMIN_PASSWORD="${RUSTPANEL_ADMIN_PASSWORD:-}"
+RUSTPANEL_SESSION_SECRET="${RUSTPANEL_SESSION_SECRET:-}"
 RUSTPANEL_VERSION="${RUSTPANEL_VERSION:-latest}"
 RUSTPANEL_REPO_SLUG="${RUSTPANEL_REPO_SLUG:-happydigua/RustPanel}"
 
@@ -174,10 +177,16 @@ generate_bind_port() {
     exit 1
 }
 
-load_existing_bind() {
+load_existing_env_value() {
+    key="$1"
+
     if [ -f /etc/rustpanel/rustpanel.env ]; then
-        awk -F= '/^RUSTPANEL_BIND=/{ print $2; exit }' /etc/rustpanel/rustpanel.env
+        awk -F= -v key="$key" '$1 == key { print substr($0, length(key) + 2); exit }' /etc/rustpanel/rustpanel.env
     fi
+}
+
+load_existing_bind() {
+    load_existing_env_value RUSTPANEL_BIND
 }
 
 load_or_create_bind() {
@@ -206,31 +215,39 @@ detect_access_host() {
         return
     fi
 
-    if command -v curl >/dev/null 2>&1; then
-        public_ip="$(curl -fsS --max-time 4 https://api.ipify.org 2>/dev/null || true)"
-        if [ -n "$public_ip" ]; then
+    if ! command -v curl >/dev/null 2>&1; then
+        return
+    fi
+
+    for endpoint in \
+        https://api.ipify.org \
+        https://ifconfig.me/ip \
+        https://icanhazip.com
+    do
+        public_ip="$(curl -fsS --max-time 4 "$endpoint" 2>/dev/null | tr -d '[:space:]' || true)"
+        if [ -n "$public_ip" ] && ! is_private_ipv4 "$public_ip"; then
             echo "$public_ip"
             return
         fi
-    fi
+    done
+}
 
-    if command -v ip >/dev/null 2>&1; then
-        route_ip="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{ for (i = 1; i <= NF; i++) if ($i == "src") { print $(i + 1); exit } }')"
-        if [ -n "$route_ip" ]; then
-            echo "$route_ip"
-            return
-        fi
-    fi
+is_private_ipv4() {
+    ip="$1"
 
-    if command -v hostname >/dev/null 2>&1; then
-        host_ip="$(hostname -I 2>/dev/null | awk '{ print $1 }')"
-        if [ -n "$host_ip" ]; then
-            echo "$host_ip"
-            return
-        fi
-    fi
+    case "$ip" in
+        10.*|127.*|169.254.*|192.168.*)
+            return 0
+            ;;
+        172.*)
+            second_octet="$(printf '%s\n' "$ip" | awk -F. '{ print $2 }')"
+            if [ "$second_octet" -ge 16 ] 2>/dev/null && [ "$second_octet" -le 31 ] 2>/dev/null; then
+                return 0
+            fi
+            ;;
+    esac
 
-    echo "SERVER_IP"
+    return 1
 }
 
 generate_base_path() {
@@ -276,15 +293,79 @@ load_or_create_base_path() {
         return
     fi
 
-    if [ -f /etc/rustpanel/rustpanel.env ]; then
-        existing_path="$(awk -F= '/^RUSTPANEL_BASE_PATH=/{ print $2; exit }' /etc/rustpanel/rustpanel.env)"
-        if [ -n "$existing_path" ]; then
-            normalize_base_path "$existing_path"
-            return
-        fi
+    existing_path="$(load_existing_env_value RUSTPANEL_BASE_PATH)"
+    if [ -n "$existing_path" ]; then
+        normalize_base_path "$existing_path"
+        return
     fi
 
     generate_base_path
+}
+
+random_hex() {
+    bytes="$1"
+
+    if command -v openssl >/dev/null 2>&1; then
+        openssl rand -hex "$bytes"
+        return
+    fi
+
+    if command -v od >/dev/null 2>&1; then
+        od -An -N"$bytes" -tx1 /dev/urandom | tr -d ' \n'
+        return
+    fi
+
+    if [ -r /proc/sys/kernel/random/uuid ]; then
+        tr -d '-' </proc/sys/kernel/random/uuid
+        return
+    fi
+
+    echo "$(date +%s%N)"
+}
+
+load_or_create_admin_user() {
+    if [ -n "$RUSTPANEL_ADMIN_USER" ]; then
+        echo "$RUSTPANEL_ADMIN_USER"
+        return
+    fi
+
+    existing_user="$(load_existing_env_value RUSTPANEL_ADMIN_USER)"
+    if [ -n "$existing_user" ]; then
+        echo "$existing_user"
+        return
+    fi
+
+    echo "admin"
+}
+
+load_or_create_admin_password() {
+    if [ -n "$RUSTPANEL_ADMIN_PASSWORD" ]; then
+        echo "$RUSTPANEL_ADMIN_PASSWORD"
+        return
+    fi
+
+    existing_password="$(load_existing_env_value RUSTPANEL_ADMIN_PASSWORD)"
+    if [ -n "$existing_password" ]; then
+        echo "$existing_password"
+        return
+    fi
+
+    random_hex 12
+}
+
+load_or_create_session_secret() {
+    if [ -n "$RUSTPANEL_SESSION_SECRET" ]; then
+        echo "$RUSTPANEL_SESSION_SECRET"
+        return
+    fi
+
+    existing_secret="$(load_existing_env_value RUSTPANEL_SESSION_SECRET)"
+    if [ -n "$existing_secret" ]; then
+        echo "$existing_secret"
+        return
+    fi
+
+    random_hex 32
 }
 
 print_access_info() {
@@ -293,15 +374,21 @@ print_access_info() {
 
     echo
     echo "RustPanel installed."
+    echo "Username: ${RUSTPANEL_ADMIN_USER}"
+    echo "Password: ${RUSTPANEL_ADMIN_PASSWORD}"
 
     case "$bind_host" in
         0.0.0.0|::)
             access_host="$(detect_access_host)"
-            echo "Access URL: http://${access_host}:${bind_port}${RUSTPANEL_BASE_PATH}"
+            if [ -n "$access_host" ]; then
+                echo "Access URL: http://${access_host}:${bind_port}${RUSTPANEL_BASE_PATH}"
+            else
+                echo "Access URL: http://PUBLIC_SERVER_IP:${bind_port}${RUSTPANEL_BASE_PATH}"
+                echo "Public IP detection failed; replace PUBLIC_SERVER_IP with your cloud server public IP."
+            fi
             echo "Bind address: ${RUSTPANEL_BIND}"
             echo "Access path: ${RUSTPANEL_BASE_PATH}"
             echo "If it does not open, allow TCP ${bind_port} in the cloud firewall/security group."
-            echo "Current public mode is for early debugging; add auth before leaving it exposed."
             ;;
         127.0.0.1|localhost)
             echo "Access URL on the server: http://${RUSTPANEL_BIND}${RUSTPANEL_BASE_PATH}"
@@ -336,10 +423,16 @@ install -d -o root -g rustpanel -m 0750 /etc/rustpanel/apps
 
 RUSTPANEL_BIND="$(load_or_create_bind)"
 RUSTPANEL_BASE_PATH="$(load_or_create_base_path)"
+RUSTPANEL_ADMIN_USER="$(load_or_create_admin_user)"
+RUSTPANEL_ADMIN_PASSWORD="$(load_or_create_admin_password)"
+RUSTPANEL_SESSION_SECRET="$(load_or_create_session_secret)"
 
 cat >/etc/rustpanel/rustpanel.env <<ENV
 RUSTPANEL_BIND=${RUSTPANEL_BIND}
 RUSTPANEL_BASE_PATH=${RUSTPANEL_BASE_PATH}
+RUSTPANEL_ADMIN_USER=${RUSTPANEL_ADMIN_USER}
+RUSTPANEL_ADMIN_PASSWORD=${RUSTPANEL_ADMIN_PASSWORD}
+RUSTPANEL_SESSION_SECRET=${RUSTPANEL_SESSION_SECRET}
 ENV
 chown root:rustpanel /etc/rustpanel/rustpanel.env
 chmod 0640 /etc/rustpanel/rustpanel.env

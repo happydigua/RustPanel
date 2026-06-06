@@ -1,0 +1,51 @@
+use tokio::process::Command;
+
+use crate::i18n::Language;
+
+#[derive(Clone)]
+pub(crate) struct UpdateCheckResult {
+    pub(crate) status: String,
+    pub(crate) status_class: String,
+    pub(crate) output: String,
+    pub(crate) update_command: String,
+}
+
+pub(crate) async fn run_update_check(language: Language) -> UpdateCheckResult {
+    let output = Command::new("rustpanel").arg("update-check").output().await;
+
+    match output {
+        Ok(output) if output.status.success() => {
+            let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+            if stdout.contains("Status: update available") {
+                UpdateCheckResult {
+                    status: language.update_available_text().to_owned(),
+                    status_class: "warn".to_owned(),
+                    output: stdout,
+                    update_command: "sudo rustpanel update".to_owned(),
+                }
+            } else {
+                UpdateCheckResult {
+                    status: language.up_to_date_text().to_owned(),
+                    status_class: "ok".to_owned(),
+                    output: stdout,
+                    update_command: "sudo rustpanel update".to_owned(),
+                }
+            }
+        }
+        Ok(output) => {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            UpdateCheckResult {
+                status: language.check_failed_text().to_owned(),
+                status_class: "error".to_owned(),
+                output: stderr.trim().to_owned(),
+                update_command: "sudo rustpanel update".to_owned(),
+            }
+        }
+        Err(error) => UpdateCheckResult {
+            status: language.check_failed_text().to_owned(),
+            status_class: "error".to_owned(),
+            output: error.to_string(),
+            update_command: "sudo rustpanel update".to_owned(),
+        },
+    }
+}

@@ -6,6 +6,9 @@ services directly on lightweight Linux servers.
 The project intentionally starts narrow:
 
 - systemd service generation and control
+- systemd service discovery for the panel service view
+- password-protected web login
+- basic CPU load, memory, disk, and uptime monitoring
 - journald-oriented logs
 - Nginx reverse proxy configuration
 - Let's Encrypt-ready ACME webroot layout
@@ -33,13 +36,18 @@ curl -fsSL https://raw.githubusercontent.com/happydigua/RustPanel/main/scripts/b
 The installer prints a server-IP based access URL:
 
 ```text
+Username: admin
+Password: 8b1f2d6e9a1c0f4b7d3a55c2
 Access URL: http://SERVER_IP:28437/rp-a13f9c2d8e4b7a90
 ```
 
 The port and path are both generated during install and reused during upgrades.
 If the page does not open, allow the printed TCP port in the cloud
-firewall/security group. Public mode is still for early debugging until real
-authentication is added.
+firewall/security group. If public IP detection fails, the installer prints
+`PUBLIC_SERVER_IP`; replace it with the public IP shown by your cloud provider.
+
+The one-command install downloads prebuilt release binaries. It does not install
+Rust or run a Rust compiler on the server.
 
 For local-only install:
 

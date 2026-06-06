@@ -1,6 +1,6 @@
 # Deployment
 
-This is the current source-based deployment flow for lightweight Linux servers.
+This is the current deployment flow for lightweight Linux servers.
 
 ## One-command install
 
@@ -10,15 +10,22 @@ curl -fsSL https://raw.githubusercontent.com/happydigua/RustPanel/main/scripts/b
 
 This installs runtime dependencies, downloads RustPanel Linux binaries from the
 latest GitHub Release, installs them into `/usr/local/bin`, enables
-`rustpaneld`, and prints a server-IP based URL:
+`rustpaneld`, and prints login credentials plus a server-IP based URL:
 
 ```text
+Username: admin
+Password: 8b1f2d6e9a1c0f4b7d3a55c2
 Access URL: http://SERVER_IP:28437/rp-a13f9c2d8e4b7a90
 ```
 
-The port and path are generated during install, saved in
-`/etc/rustpanel/rustpanel.env`, and reused during upgrades. If the page does not
-open, allow the printed TCP port in the cloud firewall/security group.
+The port, path, admin password, and session secret are generated during install,
+saved in `/etc/rustpanel/rustpanel.env`, and reused during upgrades. If the page
+does not open, allow the printed TCP port in the cloud firewall/security group.
+If public IP detection fails, the installer prints `PUBLIC_SERVER_IP`; replace
+it with the public IP shown by your cloud provider.
+
+The one-command install uses prebuilt binaries. It does not install Rust on the
+server and does not compile the project on the server.
 
 Use minimal mode when you do not want RustPanel to install Nginx/certbot:
 
