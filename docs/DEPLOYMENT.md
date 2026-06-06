@@ -8,9 +8,9 @@ This is the current source-based deployment flow for lightweight Linux servers.
 curl -fsSL https://raw.githubusercontent.com/happydigua/RustPanel/main/scripts/bootstrap-linux.sh | sudo bash
 ```
 
-This installs build dependencies, Rust, Nginx, certbot, clones the repository to
-`/opt/rustpanel-src`, builds release binaries, installs them into
-`/usr/local/bin`, enables `rustpaneld`, and prints a server-IP based URL:
+This installs runtime dependencies, downloads RustPanel Linux binaries from the
+latest GitHub Release, installs them into `/usr/local/bin`, enables
+`rustpaneld`, and prints a server-IP based URL:
 
 ```text
 Access URL: http://SERVER_IP:28437/rp-a13f9c2d8e4b7a90

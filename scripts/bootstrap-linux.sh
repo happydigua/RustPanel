@@ -6,6 +6,7 @@ BRANCH="${RUSTPANEL_BRANCH:-main}"
 INSTALL_DIR="${RUSTPANEL_SOURCE_DIR:-/opt/rustpanel-src}"
 WITH_NGINX=1
 PUBLIC_ACCESS=1
+RUSTPANEL_VERSION="${RUSTPANEL_VERSION:-latest}"
 
 for arg in "$@"; do
     case "$arg" in
@@ -21,10 +22,14 @@ for arg in "$@"; do
         --local)
             PUBLIC_ACCESS=0
             ;;
+        --version=*)
+            RUSTPANEL_VERSION="${arg#*=}"
+            ;;
         --help|-h)
             echo "Usage: curl -fsSL https://raw.githubusercontent.com/happydigua/RustPanel/main/scripts/bootstrap-linux.sh | sudo bash"
             echo "       curl -fsSL https://raw.githubusercontent.com/happydigua/RustPanel/main/scripts/bootstrap-linux.sh | sudo bash -s -- --minimal"
             echo "       curl -fsSL https://raw.githubusercontent.com/happydigua/RustPanel/main/scripts/bootstrap-linux.sh | sudo bash -s -- --local"
+            echo "       curl -fsSL https://raw.githubusercontent.com/happydigua/RustPanel/main/scripts/bootstrap-linux.sh | sudo bash -s -- --version=v0.1.0"
             exit 0
             ;;
         *)
@@ -39,37 +44,21 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
-install_build_dependencies() {
+install_runtime_dependencies() {
     if command -v apt-get >/dev/null 2>&1; then
         export DEBIAN_FRONTEND=noninteractive
         apt-get update
-        apt-get install -y build-essential pkg-config libssl-dev git curl ca-certificates
+        apt-get install -y git curl ca-certificates tar gzip
         return
     fi
 
     if command -v dnf >/dev/null 2>&1; then
-        dnf groupinstall -y "Development Tools"
-        dnf install -y git curl pkg-config openssl-devel ca-certificates
+        dnf install -y git curl ca-certificates tar gzip
         return
     fi
 
-    echo "unsupported package manager; install git, curl, pkg-config, OpenSSL headers, and a C toolchain manually" >&2
+    echo "unsupported package manager; install git, curl, ca-certificates, tar, and gzip manually" >&2
     exit 1
-}
-
-install_rust() {
-    export CARGO_HOME="${CARGO_HOME:-/root/.cargo}"
-    export RUSTUP_HOME="${RUSTUP_HOME:-/root/.rustup}"
-    export PATH="${CARGO_HOME}/bin:${PATH}"
-
-    if command -v cargo >/dev/null 2>&1; then
-        return
-    fi
-
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-        | sh -s -- -y --profile minimal
-
-    export PATH="${CARGO_HOME}/bin:${PATH}"
 }
 
 sync_source() {
@@ -85,13 +74,12 @@ sync_source() {
     git clone --branch "$BRANCH" "$REPO_URL" "$INSTALL_DIR"
 }
 
-install_build_dependencies
-install_rust
+install_runtime_dependencies
 sync_source
 
 cd "$INSTALL_DIR"
 
-install_args=()
+install_args=("--version=${RUSTPANEL_VERSION}")
 
 if [ "$WITH_NGINX" -eq 1 ]; then
     install_args+=(--with-nginx)
@@ -103,4 +91,4 @@ else
     install_args+=(--local)
 fi
 
-env "PATH=$PATH" scripts/install-linux.sh "${install_args[@]}"
+scripts/install-binary-linux.sh "${install_args[@]}"
