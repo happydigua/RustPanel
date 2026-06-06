@@ -1,4 +1,8 @@
-use std::{path::PathBuf, process::Command as ProcessCommand};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    process::Command as ProcessCommand,
+};
 
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand, ValueEnum};
@@ -95,19 +99,12 @@ fn update_check(source_dir: PathBuf, repo_url: String, branch: String) -> Result
         bail!("source directory does not exist: {}", source_dir.display());
     }
 
-    let local = git_output([
-        "-C".to_owned(),
-        source_dir.display().to_string(),
-        "rev-parse".to_owned(),
-        "HEAD".to_owned(),
-    ])?;
+    let local_commit = local_commit_from_source_dir(&source_dir)?;
     let remote_ref = format!("refs/heads/{branch}");
     let remote = git_output(["ls-remote".to_owned(), repo_url.clone(), remote_ref])?;
     let Some(remote_commit) = remote.split_whitespace().next() else {
         bail!("remote branch `{branch}` was not found at {repo_url}");
     };
-
-    let local_commit = local.trim();
 
     println!("Version: {}", env!("CARGO_PKG_VERSION"));
     println!("Source: {}", source_dir.display());
@@ -123,6 +120,72 @@ fn update_check(source_dir: PathBuf, repo_url: String, branch: String) -> Result
     }
 
     Ok(())
+}
+
+fn local_commit_from_source_dir(source_dir: &Path) -> Result<String> {
+    let git_dir = resolve_git_dir(source_dir)?;
+    let head = read_trimmed(git_dir.join("HEAD"))?;
+
+    let Some(ref_name) = head.strip_prefix("ref: ") else {
+        return Ok(head);
+    };
+
+    let loose_ref = git_dir.join(ref_name);
+    if loose_ref.exists() {
+        return read_trimmed(loose_ref);
+    }
+
+    read_packed_ref(&git_dir, ref_name)
+}
+
+fn resolve_git_dir(source_dir: &Path) -> Result<PathBuf> {
+    let dot_git = source_dir.join(".git");
+    if dot_git.is_dir() {
+        return Ok(dot_git);
+    }
+
+    let contents = fs::read_to_string(&dot_git)
+        .with_context(|| format!("failed to read {}", dot_git.display()))?;
+    let Some(raw_git_dir) = contents.trim().strip_prefix("gitdir:") else {
+        bail!("invalid git metadata file: {}", dot_git.display());
+    };
+
+    let git_dir = PathBuf::from(raw_git_dir.trim());
+    if git_dir.is_absolute() {
+        Ok(git_dir)
+    } else {
+        Ok(source_dir.join(git_dir))
+    }
+}
+
+fn read_trimmed(path: impl AsRef<Path>) -> Result<String> {
+    let path = path.as_ref();
+    Ok(fs::read_to_string(path)
+        .with_context(|| format!("failed to read {}", path.display()))?
+        .trim()
+        .to_owned())
+}
+
+fn read_packed_ref(git_dir: &Path, ref_name: &str) -> Result<String> {
+    let packed_refs_path = git_dir.join("packed-refs");
+    let packed_refs = fs::read_to_string(&packed_refs_path)
+        .with_context(|| format!("failed to read {}", packed_refs_path.display()))?;
+
+    for line in packed_refs.lines() {
+        if line.is_empty() || line.starts_with('#') || line.starts_with('^') {
+            continue;
+        }
+
+        let mut parts = line.split_whitespace();
+        let Some(commit) = parts.next() else {
+            continue;
+        };
+        if parts.next() == Some(ref_name) {
+            return Ok(commit.to_owned());
+        }
+    }
+
+    bail!("ref `{ref_name}` was not found in {}", git_dir.display());
 }
 
 fn update(source_dir: PathBuf, minimal: bool, public: bool, local: bool) -> Result<()> {
@@ -255,4 +318,88 @@ fn print_nginx(app: &AppSpec, paths: &PanelPaths) -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use super::*;
+
+    #[test]
+    fn reads_local_commit_from_loose_ref() {
+        let source_dir = test_source_dir("loose-ref");
+        let git_dir = source_dir.join(".git");
+        fs::create_dir_all(git_dir.join("refs/heads")).unwrap();
+        fs::write(git_dir.join("HEAD"), "ref: refs/heads/main\n").unwrap();
+        fs::write(
+            git_dir.join("refs/heads/main"),
+            "1111111111111111111111111111111111111111\n",
+        )
+        .unwrap();
+
+        assert_eq!(
+            local_commit_from_source_dir(&source_dir).unwrap(),
+            "1111111111111111111111111111111111111111"
+        );
+
+        fs::remove_dir_all(source_dir).unwrap();
+    }
+
+    #[test]
+    fn reads_local_commit_from_packed_ref() {
+        let source_dir = test_source_dir("packed-ref");
+        let git_dir = source_dir.join(".git");
+        fs::create_dir_all(&git_dir).unwrap();
+        fs::write(git_dir.join("HEAD"), "ref: refs/heads/main\n").unwrap();
+        fs::write(
+            git_dir.join("packed-refs"),
+            "# pack-refs\n2222222222222222222222222222222222222222 refs/heads/main\n",
+        )
+        .unwrap();
+
+        assert_eq!(
+            local_commit_from_source_dir(&source_dir).unwrap(),
+            "2222222222222222222222222222222222222222"
+        );
+
+        fs::remove_dir_all(source_dir).unwrap();
+    }
+
+    #[test]
+    fn reads_local_commit_from_gitdir_file() {
+        let root = test_source_dir("gitdir-file-root");
+        let source_dir = root.join("worktree");
+        let git_dir = root.join("actual-git-dir");
+        fs::create_dir_all(&source_dir).unwrap();
+        fs::create_dir_all(git_dir.join("refs/heads")).unwrap();
+        fs::write(
+            source_dir.join(".git"),
+            format!("gitdir: {}\n", git_dir.display()),
+        )
+        .unwrap();
+        fs::write(git_dir.join("HEAD"), "ref: refs/heads/main\n").unwrap();
+        fs::write(
+            git_dir.join("refs/heads/main"),
+            "3333333333333333333333333333333333333333\n",
+        )
+        .unwrap();
+
+        assert_eq!(
+            local_commit_from_source_dir(&source_dir).unwrap(),
+            "3333333333333333333333333333333333333333"
+        );
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    fn test_source_dir(name: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!("rustpanel-{name}-{unique}"));
+        fs::create_dir_all(&path).unwrap();
+        path
+    }
 }
