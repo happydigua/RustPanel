@@ -27,18 +27,19 @@ pub(crate) async fn run_update_check(language: Language) -> UpdateCheckResult {
     match output {
         Ok(output) if output.status.success() => {
             let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+            let display_output = display_update_check_output(&stdout);
             if stdout.contains("Status: update available") {
                 UpdateCheckResult {
                     status: language.update_available_text().to_owned(),
                     status_class: "warn".to_owned(),
-                    output: stdout,
+                    output: display_output,
                     update_command: "sudo rustpanel update".to_owned(),
                 }
             } else {
                 UpdateCheckResult {
                     status: language.up_to_date_text().to_owned(),
                     status_class: "ok".to_owned(),
-                    output: stdout,
+                    output: display_output,
                     update_command: "sudo rustpanel update".to_owned(),
                 }
             }
@@ -58,5 +59,28 @@ pub(crate) async fn run_update_check(language: Language) -> UpdateCheckResult {
             output: error.to_string(),
             update_command: "sudo rustpanel update".to_owned(),
         },
+    }
+}
+
+fn display_update_check_output(output: &str) -> String {
+    output
+        .lines()
+        .filter(|line| !line.starts_with("Update:"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hides_ssh_update_command_from_panel_output() {
+        let output = "Version: 0.1.4\nStatus: update available\nUpdate: sudo rustpanel update\n";
+
+        assert_eq!(
+            display_update_check_output(output),
+            "Version: 0.1.4\nStatus: update available"
+        );
     }
 }

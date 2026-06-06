@@ -5,16 +5,25 @@ pub(crate) struct SystemMetrics {
     pub(crate) load_summary: String,
     pub(crate) load_detail: String,
     pub(crate) memory: String,
+    pub(crate) memory_total: String,
+    pub(crate) memory_used: String,
+    pub(crate) memory_available: String,
+    pub(crate) memory_usage_percent: String,
     pub(crate) disk: String,
     pub(crate) uptime: String,
 }
 
 pub(crate) fn collect_system_metrics() -> SystemMetrics {
     let load = load_average().unwrap_or_else(LoadAverage::unknown);
+    let memory = memory_snapshot().unwrap_or_else(MemorySnapshot::unknown);
     SystemMetrics {
         load_summary: load.summary(),
         load_detail: load.detail(),
-        memory: memory_usage().unwrap_or_else(|| "unknown".to_owned()),
+        memory: memory.usage(),
+        memory_total: memory.total(),
+        memory_used: memory.used(),
+        memory_available: memory.available(),
+        memory_usage_percent: memory.usage_percent(),
         disk: disk_usage().unwrap_or_else(|| "unknown".to_owned()),
         uptime: uptime().unwrap_or_else(|| "unknown".to_owned()),
     }
@@ -78,13 +87,63 @@ fn load_average() -> Option<LoadAverage> {
     })
 }
 
-fn memory_usage() -> Option<String> {
+#[derive(Clone, Copy)]
+struct MemorySnapshot {
+    total_kib: u64,
+    available_kib: u64,
+}
+
+impl MemorySnapshot {
+    fn unknown() -> Self {
+        Self {
+            total_kib: 0,
+            available_kib: 0,
+        }
+    }
+
+    fn used_kib(self) -> u64 {
+        self.total_kib.saturating_sub(self.available_kib)
+    }
+
+    fn usage(self) -> String {
+        if self.total_kib == 0 {
+            "unknown".to_owned()
+        } else {
+            format!("{} / {}", self.used(), self.total())
+        }
+    }
+
+    fn total(self) -> String {
+        human_kib_or_unknown(self.total_kib)
+    }
+
+    fn used(self) -> String {
+        human_kib_or_unknown(self.used_kib())
+    }
+
+    fn available(self) -> String {
+        human_kib_or_unknown(self.available_kib)
+    }
+
+    fn usage_percent(self) -> String {
+        if self.total_kib == 0 {
+            "unknown".to_owned()
+        } else {
+            format!(
+                "{:.0}%",
+                self.used_kib() as f64 / self.total_kib as f64 * 100.0
+            )
+        }
+    }
+}
+
+fn memory_snapshot() -> Option<MemorySnapshot> {
     let contents = std::fs::read_to_string("/proc/meminfo").ok()?;
     let values = parse_meminfo(&contents);
-    let total = *values.get("MemTotal")?;
-    let available = *values.get("MemAvailable")?;
-    let used = total.saturating_sub(available);
-    Some(format!("{} / {}", human_kib(used), human_kib(total)))
+    Some(MemorySnapshot {
+        total_kib: *values.get("MemTotal")?,
+        available_kib: *values.get("MemAvailable")?,
+    })
 }
 
 fn parse_meminfo(contents: &str) -> HashMap<String, u64> {
@@ -136,6 +195,14 @@ fn human_kib(kib: u64) -> String {
     }
 }
 
+fn human_kib_or_unknown(kib: u64) -> String {
+    if kib == 0 {
+        "unknown".to_owned()
+    } else {
+        human_kib(kib)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -157,5 +224,18 @@ mod tests {
 
         assert_eq!(load.summary(), "正常 (25% / core)");
         assert_eq!(load.detail(), "1m 0.50, 5m 0.30, 15m 0.20, 2 cores");
+    }
+
+    #[test]
+    fn explains_memory_usage() {
+        let memory = MemorySnapshot {
+            total_kib: 4 * 1024 * 1024,
+            available_kib: 3 * 1024 * 1024,
+        };
+
+        assert_eq!(memory.total(), "4.0 GiB");
+        assert_eq!(memory.used(), "1.0 GiB");
+        assert_eq!(memory.available(), "3.0 GiB");
+        assert_eq!(memory.usage_percent(), "25%");
     }
 }

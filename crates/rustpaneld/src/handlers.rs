@@ -12,6 +12,7 @@ use crate::{
     auth::{clear_session_cookie, is_authenticated, set_session_cookie},
     config::{scoped_lang_path, scoped_path},
     i18n::Language,
+    privileged::{JobKind, JobStatus, read_job_status, start_certificate, start_update},
     processes::collect_processes,
     services::{ServiceUnit, collect_service_units},
     sites::{discover_sites, managed_config_dir},
@@ -25,12 +26,20 @@ use crate::{
 #[derive(Debug, Deserialize)]
 pub(crate) struct PageParams {
     lang: Option<String>,
+    state: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct LoginForm {
     username: String,
     password: String,
+    lang: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct CertificateForm {
+    domain: String,
+    email: String,
     lang: Option<String>,
 }
 
@@ -55,7 +64,7 @@ pub(crate) async fn overview_page(
     State(state): State<AppState>,
     Query(params): Query<PageParams>,
 ) -> Response {
-    render_panel_page(headers, state, params, PanelPage::Overview, None).await
+    render_panel_page(headers, state, params, PanelPage::Overview, None, None).await
 }
 
 pub(crate) async fn processes_page(
@@ -63,7 +72,7 @@ pub(crate) async fn processes_page(
     State(state): State<AppState>,
     Query(params): Query<PageParams>,
 ) -> Response {
-    render_panel_page(headers, state, params, PanelPage::Processes, None).await
+    render_panel_page(headers, state, params, PanelPage::Processes, None, None).await
 }
 
 pub(crate) async fn services_page(
@@ -71,7 +80,7 @@ pub(crate) async fn services_page(
     State(state): State<AppState>,
     Query(params): Query<PageParams>,
 ) -> Response {
-    render_panel_page(headers, state, params, PanelPage::Services, None).await
+    render_panel_page(headers, state, params, PanelPage::Services, None, None).await
 }
 
 pub(crate) async fn sites_page(
@@ -79,7 +88,7 @@ pub(crate) async fn sites_page(
     State(state): State<AppState>,
     Query(params): Query<PageParams>,
 ) -> Response {
-    render_panel_page(headers, state, params, PanelPage::Sites, None).await
+    render_panel_page(headers, state, params, PanelPage::Sites, None, None).await
 }
 
 pub(crate) async fn ssl_page(
@@ -87,7 +96,7 @@ pub(crate) async fn ssl_page(
     State(state): State<AppState>,
     Query(params): Query<PageParams>,
 ) -> Response {
-    render_panel_page(headers, state, params, PanelPage::Ssl, None).await
+    render_panel_page(headers, state, params, PanelPage::Ssl, None, None).await
 }
 
 pub(crate) async fn update_check_page(
@@ -97,7 +106,57 @@ pub(crate) async fn update_check_page(
 ) -> Response {
     let language = Language::from_param(params.lang.as_deref());
     let result = run_update_check(language).await;
-    render_panel_page(headers, state, params, PanelPage::Update, Some(result)).await
+    render_panel_page(
+        headers,
+        state,
+        params,
+        PanelPage::Update,
+        Some(result),
+        None,
+    )
+    .await
+}
+
+pub(crate) async fn update_run_page(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Query(params): Query<PageParams>,
+) -> Response {
+    let language = Language::from_param(params.lang.as_deref());
+    if !is_authenticated(&headers, &state.auth) {
+        return Redirect::to(&scoped_lang_path(&state.base_path, "/login", language))
+            .into_response();
+    }
+
+    let flash = match start_update().await {
+        Ok(message) => ("ok".to_owned(), message),
+        Err(error) => ("error".to_owned(), format!("更新启动失败: {error:#}")),
+    };
+
+    render_panel_page(headers, state, params, PanelPage::Update, None, Some(flash)).await
+}
+
+pub(crate) async fn certificate_issue_page(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Form(form): Form<CertificateForm>,
+) -> Response {
+    let params = PageParams {
+        lang: form.lang.clone(),
+        state: None,
+    };
+    let language = Language::from_param(params.lang.as_deref());
+    if !is_authenticated(&headers, &state.auth) {
+        return Redirect::to(&scoped_lang_path(&state.base_path, "/login", language))
+            .into_response();
+    }
+
+    let flash = match start_certificate(form.domain, form.email).await {
+        Ok(message) => ("ok".to_owned(), message),
+        Err(error) => ("error".to_owned(), format!("证书申请启动失败: {error:#}")),
+    };
+
+    render_panel_page(headers, state, params, PanelPage::Ssl, None, Some(flash)).await
 }
 
 async fn render_panel_page(
@@ -106,6 +165,7 @@ async fn render_panel_page(
     params: PageParams,
     page: PanelPage,
     update_result: Option<UpdateCheckResult>,
+    flash: Option<(String, String)>,
 ) -> Response {
     let language = Language::from_param(params.lang.as_deref());
     if !is_authenticated(&headers, &state.auth) {
@@ -122,15 +182,21 @@ async fn render_panel_page(
         PanelPage::Overview => 8,
         _ => 200,
     });
-    let service_rows = service_rows(language, services);
+    let service_filter = ServiceFilter::from_param(params.state.as_deref());
+    let service_rows = filtered_service_rows(language, services, service_filter);
     let sites = discover_sites();
     let ssl_info = collect_ssl_info();
     let active_page = page.key().to_owned();
+    let (has_flash, flash_class, flash_message) = match flash {
+        Some((class, message)) => (true, class, message),
+        None => (false, String::new(), String::new()),
+    };
 
     render(PanelTemplate {
         labels,
         page_title: page.title(language).to_owned(),
         active_page: active_page.clone(),
+        lang_code: language.code().to_owned(),
         overview_class: nav_class(&active_page, "overview"),
         processes_class: nav_class(&active_page, "processes"),
         services_class: nav_class(&active_page, "services"),
@@ -140,9 +206,39 @@ async fn render_panel_page(
         overview_path: scoped_lang_path(&state.base_path, "/", language),
         processes_path: scoped_lang_path(&state.base_path, "/processes", language),
         services_path: scoped_lang_path(&state.base_path, "/services", language),
+        services_running_path: scoped_lang_state_path(
+            &state.base_path,
+            "/services",
+            language,
+            ServiceFilter::Running,
+        ),
+        services_failed_path: scoped_lang_state_path(
+            &state.base_path,
+            "/services",
+            language,
+            ServiceFilter::Failed,
+        ),
+        services_stopped_path: scoped_lang_state_path(
+            &state.base_path,
+            "/services",
+            language,
+            ServiceFilter::Stopped,
+        ),
+        services_all_path: scoped_lang_state_path(
+            &state.base_path,
+            "/services",
+            language,
+            ServiceFilter::All,
+        ),
+        services_running_class: segment_class(service_filter, ServiceFilter::Running),
+        services_failed_class: segment_class(service_filter, ServiceFilter::Failed),
+        services_stopped_class: segment_class(service_filter, ServiceFilter::Stopped),
+        services_all_class: segment_class(service_filter, ServiceFilter::All),
         sites_path: scoped_lang_path(&state.base_path, "/sites", language),
         ssl_path: scoped_lang_path(&state.base_path, "/ssl", language),
         update_path: scoped_lang_path(&state.base_path, "/update-check", language),
+        update_run_path: scoped_lang_path(&state.base_path, "/update-run", language),
+        certificate_issue_path: scoped_path(&state.base_path, "/ssl/issue"),
         lang_zh_path: scoped_lang_path(&state.base_path, page.path(), Language::Zh),
         lang_en_path: scoped_lang_path(&state.base_path, page.path(), Language::En),
         logout_path: scoped_lang_path(&state.base_path, "/logout", language),
@@ -162,6 +258,14 @@ async fn render_panel_page(
         has_certificates: !ssl_info.certificates.is_empty(),
         ssl_info,
         update_result: update_result.unwrap_or_else(UpdateCheckResult::empty),
+        update_job_status: localized_job_status(read_job_status(JobKind::Update), language),
+        certificate_job_status: localized_job_status(
+            read_job_status(JobKind::Certificate),
+            language,
+        ),
+        has_flash,
+        flash_class,
+        flash_message,
     })
     .into_response()
 }
@@ -207,9 +311,51 @@ pub(crate) async fn healthz() -> impl IntoResponse {
     }))
 }
 
-fn service_rows(language: Language, services: Vec<ServiceUnit>) -> Vec<ServiceRow> {
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum ServiceFilter {
+    Running,
+    Failed,
+    Stopped,
+    All,
+}
+
+impl ServiceFilter {
+    fn from_param(param: Option<&str>) -> Self {
+        match param {
+            Some("failed") => Self::Failed,
+            Some("stopped") => Self::Stopped,
+            Some("all") => Self::All,
+            _ => Self::Running,
+        }
+    }
+
+    fn param(self) -> &'static str {
+        match self {
+            Self::Running => "running",
+            Self::Failed => "failed",
+            Self::Stopped => "stopped",
+            Self::All => "all",
+        }
+    }
+
+    fn matches(self, service: &ServiceUnit) -> bool {
+        match self {
+            Self::Running => service.active_state == "active",
+            Self::Failed => service.active_state == "failed",
+            Self::Stopped => service.active_state == "inactive",
+            Self::All => true,
+        }
+    }
+}
+
+fn filtered_service_rows(
+    language: Language,
+    services: Vec<ServiceUnit>,
+    filter: ServiceFilter,
+) -> Vec<ServiceRow> {
     services
         .into_iter()
+        .filter(|service| filter.matches(service))
         .map(|service| {
             let state_class = match service.active_state.as_str() {
                 "active" => "ok",
@@ -226,8 +372,6 @@ fn service_rows(language: Language, services: Vec<ServiceUnit>) -> Vec<ServiceRo
             ServiceRow {
                 name: service.name,
                 load_state: language.state_text(&service.load_state),
-                active_state: service.active_state,
-                sub_state: service.sub_state,
                 state_label,
                 state_class,
                 description: service.description,
@@ -261,6 +405,49 @@ fn nav_class(active_page: &str, page: &str) -> String {
     } else {
         String::new()
     }
+}
+
+fn segment_class(active_filter: ServiceFilter, filter: ServiceFilter) -> String {
+    if active_filter == filter {
+        "active".to_owned()
+    } else {
+        String::new()
+    }
+}
+
+fn scoped_lang_state_path(
+    base_path: &str,
+    path: &str,
+    language: Language,
+    filter: ServiceFilter,
+) -> String {
+    format!(
+        "{}?lang={}&state={}",
+        scoped_path(base_path, path),
+        language.code(),
+        filter.param()
+    )
+}
+
+fn localized_job_status(mut status: JobStatus, language: Language) -> JobStatus {
+    status.status = match (language, status.status.as_str()) {
+        (Language::Zh, "idle") => "未执行",
+        (Language::Zh, "running") => "执行中",
+        (Language::Zh, "completed") => "已完成",
+        (Language::Zh, "failed") => "失败",
+        (Language::En, "idle") => "Idle",
+        (Language::En, "running") => "Running",
+        (Language::En, "completed") => "Completed",
+        (Language::En, "failed") => "Failed",
+        _ => status.status.as_str(),
+    }
+    .to_owned();
+
+    if matches!(language, Language::En) && status.message == "尚未执行" {
+        status.message = "Not run yet".to_owned();
+    }
+
+    status
 }
 
 fn current_version() -> String {

@@ -10,7 +10,8 @@ curl -fL --connect-timeout 15 --max-time 120 https://raw.githubusercontent.com/h
 
 This installs runtime dependencies, downloads RustPanel Linux binaries from the
 latest GitHub Release, installs them into `/usr/local/bin`, enables
-`rustpaneld`, and prints login credentials plus a server-IP based URL:
+`rustpaneld` and `rustpanel-helperd`, and prints login credentials plus a
+server-IP based URL:
 
 ```text
 Username: admin
@@ -26,6 +27,11 @@ it with the public IP shown by your cloud provider.
 
 The one-command install uses prebuilt binaries. It does not install Rust on the
 server and does not compile the project on the server.
+
+With the default install, RustPanel also installs Nginx, certbot, and the
+certbot Nginx plugin. Panel-triggered updates and certificate issuance go
+through `rustpanel-helperd`; the web daemon itself runs as the unprivileged
+`rustpanel` user.
 
 Use minimal mode when you do not want RustPanel to install Nginx/certbot:
 
@@ -84,10 +90,11 @@ sudo env "PATH=$PATH" scripts/install-linux.sh --with-nginx
 
 ```bash
 systemctl status rustpaneld --no-pager
+systemctl status rustpanel-helperd --no-pager
 journalctl -u rustpaneld -f
+journalctl -u rustpanel-helperd -f
 rustpanel version
 rustpanel update-check
-sudo rustpanel update
 rustpanel render-sample
 rustpanel-helper contract
 ```

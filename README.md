@@ -9,9 +9,11 @@ The project intentionally starts narrow:
 - systemd service discovery for the panel service view
 - password-protected web login
 - basic CPU load, memory, disk, and uptime monitoring
+- memory-sorted process inspection with Linux process state explanations
 - journald-oriented logs
 - Nginx reverse proxy configuration
-- Let's Encrypt-ready ACME webroot layout
+- Let's Encrypt certificate issuance through certbot's Nginx plugin
+- panel-triggered updates through a restricted privileged helper
 - a small Rust daemon with server-rendered UI
 - a CLI for bootstrap and diagnostics
 
@@ -23,7 +25,7 @@ every feature in traditional hosting panels.
 ```text
 crates/rustpanel-core     Shared app model and config renderers
 crates/rustpaneld         Web daemon
-crates/rustpanel-helper   Future root helper for privileged actions
+crates/rustpanel-helper   Restricted root helper for updates and certificates
 crates/rustpanel-cli      CLI for setup, preview, and diagnostics
 ```
 
@@ -48,6 +50,11 @@ firewall/security group. If public IP detection fails, the installer prints
 
 The one-command install downloads prebuilt release binaries. It does not install
 Rust or run a Rust compiler on the server.
+
+With the default install, RustPanel installs Nginx, certbot, and the certbot
+Nginx plugin. Updates and certificate issuance can be started from the panel;
+the web daemon remains a normal `rustpanel` user and sends only whitelisted
+actions to `rustpanel-helperd`.
 
 For local-only install:
 

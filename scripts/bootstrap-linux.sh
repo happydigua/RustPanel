@@ -33,7 +33,7 @@ for arg in "$@"; do
             echo "Usage: curl -fL --connect-timeout 15 --max-time 120 https://raw.githubusercontent.com/happydigua/RustPanel/main/scripts/bootstrap-linux.sh -o /tmp/rustpanel-bootstrap-linux.sh && sudo bash /tmp/rustpanel-bootstrap-linux.sh"
             echo "       curl -fL --connect-timeout 15 --max-time 120 https://raw.githubusercontent.com/happydigua/RustPanel/main/scripts/bootstrap-linux.sh -o /tmp/rustpanel-bootstrap-linux.sh && sudo bash /tmp/rustpanel-bootstrap-linux.sh --minimal"
             echo "       curl -fL --connect-timeout 15 --max-time 120 https://raw.githubusercontent.com/happydigua/RustPanel/main/scripts/bootstrap-linux.sh -o /tmp/rustpanel-bootstrap-linux.sh && sudo bash /tmp/rustpanel-bootstrap-linux.sh --local"
-            echo "       curl -fL --connect-timeout 15 --max-time 120 https://raw.githubusercontent.com/happydigua/RustPanel/main/scripts/bootstrap-linux.sh -o /tmp/rustpanel-bootstrap-linux.sh && sudo bash /tmp/rustpanel-bootstrap-linux.sh --version=v0.1.1"
+            echo "       curl -fL --connect-timeout 15 --max-time 120 https://raw.githubusercontent.com/happydigua/RustPanel/main/scripts/bootstrap-linux.sh -o /tmp/rustpanel-bootstrap-linux.sh && sudo bash /tmp/rustpanel-bootstrap-linux.sh --version=v0.1.4"
             exit 0
             ;;
         *)

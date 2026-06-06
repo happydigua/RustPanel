@@ -5,6 +5,7 @@ pub(crate) struct ProcessInfo {
     pub(crate) pid: u32,
     pub(crate) name: String,
     pub(crate) state: String,
+    pub(crate) state_detail: String,
     pub(crate) memory: String,
     pub(crate) virtual_memory: String,
     rss_kib: u64,
@@ -41,9 +42,10 @@ fn parse_status(pid: u32, contents: &str) -> ProcessInfo {
     let name = status_value(contents, "Name")
         .unwrap_or("unknown")
         .to_owned();
-    let state = status_value(contents, "State")
+    let state_detail = status_value(contents, "State")
         .unwrap_or("unknown")
         .to_owned();
+    let state = translate_process_state(&state_detail);
     let rss_kib = status_kib(contents, "VmRSS").unwrap_or(0);
     let vm_size_kib = status_kib(contents, "VmSize").unwrap_or(0);
 
@@ -51,10 +53,24 @@ fn parse_status(pid: u32, contents: &str) -> ProcessInfo {
         pid,
         name,
         state,
+        state_detail,
         memory: human_kib(rss_kib),
         virtual_memory: human_kib(vm_size_kib),
         rss_kib,
     }
+}
+
+fn translate_process_state(state: &str) -> String {
+    match state.chars().next() {
+        Some('R') => "运行中",
+        Some('S') => "休眠中",
+        Some('D') => "不可中断等待",
+        Some('T') | Some('t') => "已停止",
+        Some('Z') => "僵尸进程",
+        Some('I') => "空闲内核线程",
+        _ => "未知",
+    }
+    .to_owned()
 }
 
 fn status_value<'a>(contents: &'a str, key: &str) -> Option<&'a str> {
@@ -110,6 +126,8 @@ mod tests {
 
         assert_eq!(process.pid, 42);
         assert_eq!(process.name, "nginx");
+        assert_eq!(process.state, "休眠中");
+        assert_eq!(process.state_detail, "S (sleeping)");
         assert_eq!(process.memory, "64 MiB");
         assert_eq!(process.virtual_memory, "200 MiB");
     }

@@ -2,6 +2,7 @@ mod auth;
 mod config;
 mod handlers;
 mod i18n;
+mod privileged;
 mod processes;
 mod services;
 mod sites;

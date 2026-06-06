@@ -1,7 +1,7 @@
 use askama::Template;
 
 use crate::{
-    i18n::TextLabels, processes::ProcessInfo, sites::SiteInfo, ssl::SslInfo,
+    i18n::TextLabels, privileged::JobStatus, processes::ProcessInfo, sites::SiteInfo, ssl::SslInfo,
     system_metrics::SystemMetrics, updates::UpdateCheckResult,
 };
 
@@ -9,8 +9,6 @@ use crate::{
 pub(crate) struct ServiceRow {
     pub(crate) name: String,
     pub(crate) load_state: String,
-    pub(crate) active_state: String,
-    pub(crate) sub_state: String,
     pub(crate) state_label: String,
     pub(crate) state_class: String,
     pub(crate) description: String,
@@ -47,6 +45,37 @@ pub(crate) struct ServiceRow {
             font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         }
         a { color: var(--accent); text-decoration: none; }
+        button, input {
+            font: inherit;
+        }
+        button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 36px;
+            border: 0;
+            border-radius: 6px;
+            padding: 0 14px;
+            background: var(--accent);
+            color: #fff;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        input {
+            width: 100%;
+            min-height: 38px;
+            border: 1px solid var(--line);
+            border-radius: 6px;
+            padding: 7px 10px;
+            background: #fff;
+            color: var(--text);
+        }
+        label {
+            display: grid;
+            gap: 6px;
+            color: var(--muted);
+            font-size: 13px;
+        }
         .shell { min-height: 100vh; display: grid; grid-template-columns: 224px minmax(0, 1fr); }
         .sidebar { background: #ffffff; border-right: 1px solid var(--line); padding: 18px 14px; }
         .brand { font-size: 18px; font-weight: 700; margin: 0 8px 18px; }
@@ -76,6 +105,10 @@ pub(crate) struct ServiceRow {
         .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
         .panel-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 15px 18px; border-bottom: 1px solid var(--line); }
         .panel-body { padding: 16px 18px; }
+        .form-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 0.6fr) auto; gap: 12px; align-items: end; }
+        .flash { margin-bottom: 16px; border-radius: 8px; padding: 11px 14px; border: 1px solid var(--line); background: #fff; }
+        .flash.ok { border-color: #bbf7d0; background: #f0fdf4; color: var(--ok); }
+        .flash.error { border-color: #fecaca; background: #fef2f2; color: var(--bad); }
         h2 { margin: 0; font-size: 16px; line-height: 1.3; }
         table { width: 100%; border-collapse: collapse; }
         th, td { padding: 11px 18px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; overflow-wrap: anywhere; }
@@ -89,6 +122,9 @@ pub(crate) struct ServiceRow {
         .status.warn { color: var(--warn); background: #fffbeb; }
         .status.error, .status.failed { color: var(--bad); background: #fef2f2; }
         .status.idle { color: var(--muted); background: #f1f5f9; }
+        .segments { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 3px; border: 1px solid var(--line); border-radius: 8px; background: #f8fafc; }
+        .segments a { border-radius: 6px; padding: 6px 10px; color: var(--muted); }
+        .segments a.active { background: var(--panel); color: var(--accent); font-weight: 700; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08); }
         .kv { margin: 0; display: grid; gap: 6px; }
         .kv dt { color: var(--muted); font-size: 13px; }
         .kv dd { margin: 0; }
@@ -99,7 +135,7 @@ pub(crate) struct ServiceRow {
             .topbar, .top-actions { align-items: flex-start; flex-direction: column; }
             .topbar { padding: 14px 16px; }
             main { width: calc(100vw - 24px); margin: 18px auto; }
-            .metrics, .grid-2 { grid-template-columns: 1fr; }
+            .metrics, .grid-2, .form-grid { grid-template-columns: 1fr; }
             table, thead, tbody, tr, th, td { display: block; }
             thead { display: none; }
             tr { padding: 12px 0; border-bottom: 1px solid var(--line); }
@@ -130,6 +166,10 @@ pub(crate) struct ServiceRow {
                 </div>
             </header>
             <main>
+                {% if has_flash %}
+                <div class="flash {{ flash_class }}">{{ flash_message }}</div>
+                {% endif %}
+
                 {% if active_page == "overview" %}
                 <section class="metrics" aria-label="Overview">
                     <div class="metric"><span>{{ labels.sites }}</span><strong>{{ site_count }}</strong></div>
@@ -164,7 +204,7 @@ pub(crate) struct ServiceRow {
                         <thead><tr><th>{{ labels.pid }}</th><th>{{ labels.process }}</th><th>{{ labels.memory }}</th><th>{{ labels.virtual_memory }}</th><th>{{ labels.state }}</th></tr></thead>
                         <tbody>
                             {% for process in processes %}
-                            <tr><td><code>{{ process.pid }}</code></td><td>{{ process.name }}</td><td>{{ process.memory }}</td><td>{{ process.virtual_memory }}</td><td>{{ process.state }}</td></tr>
+                            <tr><td><code>{{ process.pid }}</code></td><td>{{ process.name }}</td><td>{{ process.memory }}</td><td>{{ process.virtual_memory }}</td><td>{{ process.state }}<br><span class="muted">{{ process.state_detail }}</span></td></tr>
                             {% endfor %}
                         </tbody>
                     </table>
@@ -175,6 +215,12 @@ pub(crate) struct ServiceRow {
                 {% endif %}
 
                 {% if active_page == "processes" %}
+                <section class="metrics" aria-label="Memory">
+                    <div class="metric"><span>{{ labels.memory_total }}</span><strong>{{ metrics.memory_total }}</strong></div>
+                    <div class="metric"><span>{{ labels.memory_used }}</span><strong>{{ metrics.memory_used }}</strong></div>
+                    <div class="metric"><span>{{ labels.memory_available }}</span><strong>{{ metrics.memory_available }}</strong></div>
+                    <div class="metric"><span>{{ labels.memory_usage_percent }}</span><strong>{{ metrics.memory_usage_percent }}</strong></div>
+                </section>
                 <section class="panel">
                     <div class="panel-header"><h2>{{ labels.processes }}</h2></div>
                     {% if has_processes %}
@@ -182,7 +228,7 @@ pub(crate) struct ServiceRow {
                         <thead><tr><th>{{ labels.pid }}</th><th>{{ labels.process }}</th><th>{{ labels.memory }}</th><th>{{ labels.virtual_memory }}</th><th>{{ labels.state }}</th></tr></thead>
                         <tbody>
                             {% for process in processes %}
-                            <tr><td><code>{{ process.pid }}</code></td><td>{{ process.name }}</td><td>{{ process.memory }}</td><td>{{ process.virtual_memory }}</td><td>{{ process.state }}</td></tr>
+                            <tr><td><code>{{ process.pid }}</code></td><td>{{ process.name }}</td><td>{{ process.memory }}</td><td>{{ process.virtual_memory }}</td><td>{{ process.state }}<br><span class="muted">{{ process.state_detail }}</span></td></tr>
                             {% endfor %}
                         </tbody>
                     </table>
@@ -194,7 +240,15 @@ pub(crate) struct ServiceRow {
 
                 {% if active_page == "services" %}
                 <section class="panel">
-                    <div class="panel-header"><h2>{{ labels.systemd_services }}</h2></div>
+                    <div class="panel-header">
+                        <h2>{{ labels.systemd_services }}</h2>
+                        <div class="segments">
+                            <a class="{{ services_running_class }}" href="{{ services_running_path }}">{{ labels.service_filter_running }}</a>
+                            <a class="{{ services_failed_class }}" href="{{ services_failed_path }}">{{ labels.service_filter_failed }}</a>
+                            <a class="{{ services_stopped_class }}" href="{{ services_stopped_path }}">{{ labels.service_filter_stopped }}</a>
+                            <a class="{{ services_all_class }}" href="{{ services_all_path }}">{{ labels.service_filter_all }}</a>
+                        </div>
+                    </div>
                     {% if has_services %}
                     <table>
                         <thead><tr><th>{{ labels.service }}</th><th>{{ labels.state }}</th><th>{{ labels.name }}</th></tr></thead>
@@ -202,7 +256,7 @@ pub(crate) struct ServiceRow {
                             {% for service in services %}
                             <tr>
                                 <td><code>{{ service.name }}</code><br><span class="muted">{{ service.load_state }}</span></td>
-                                <td><span class="status {{ service.state_class }}">{{ service.state_label }}</span><br><span class="muted">{{ service.active_state }} / {{ service.sub_state }}</span></td>
+                                <td><span class="status {{ service.state_class }}">{{ service.state_label }}</span></td>
                                 <td>{{ service.description }}</td>
                             </tr>
                             {% endfor %}
@@ -249,6 +303,29 @@ pub(crate) struct ServiceRow {
                     </section>
                 </div>
                 <section class="panel" style="margin-top:20px">
+                    <div class="panel-header"><h2>{{ labels.issue_certificate }}</h2></div>
+                    <div class="panel-body">
+                        <form class="form-grid" method="post" action="{{ certificate_issue_path }}">
+                            <input type="hidden" name="lang" value="{{ lang_code }}">
+                            <label>{{ labels.domains }}
+                                <input name="domain" placeholder="example.com" required>
+                            </label>
+                            <label>{{ labels.email }}
+                                <input name="email" type="email" placeholder="admin@example.com" required>
+                            </label>
+                            <button type="submit">{{ labels.issue_certificate }}</button>
+                        </form>
+                        <p class="muted">{{ labels.domain_required }}</p>
+                        <dl class="kv">
+                            <dt>{{ labels.certificate_status }}</dt>
+                            <dd><span class="status {{ certificate_job_status.status_class }}">{{ certificate_job_status.status }}</span></dd>
+                            <dt>{{ labels.check_result }}</dt>
+                            <dd>{{ certificate_job_status.message }}</dd>
+                        </dl>
+                        <pre>{{ certificate_job_status.output }}</pre>
+                    </div>
+                </section>
+                <section class="panel" style="margin-top:20px">
                     <div class="panel-header"><h2>{{ labels.certificates }}</h2></div>
                     {% if has_certificates %}
                     <table>
@@ -273,7 +350,17 @@ pub(crate) struct ServiceRow {
                     </div>
                     <div class="panel-body">
                         <p class="muted">{{ labels.current_version }}: <code>{{ version }}</code></p>
+                        <form method="post" action="{{ update_run_path }}">
+                            <button type="submit">{{ labels.run_update }}</button>
+                        </form>
                         <p>{{ labels.update_help }}: <code>{{ update_result.update_command }}</code></p>
+                        <dl class="kv">
+                            <dt>{{ labels.update_status }}</dt>
+                            <dd><span class="status {{ update_job_status.status_class }}">{{ update_job_status.status }}</span></dd>
+                            <dt>{{ labels.check_result }}</dt>
+                            <dd>{{ update_job_status.message }}</dd>
+                        </dl>
+                        <pre>{{ update_job_status.output }}</pre>
                         <h2>{{ labels.check_result }}</h2>
                         <pre>{{ update_result.output }}</pre>
                     </div>
@@ -291,6 +378,7 @@ pub(crate) struct PanelTemplate {
     pub(crate) labels: TextLabels,
     pub(crate) page_title: String,
     pub(crate) active_page: String,
+    pub(crate) lang_code: String,
     pub(crate) overview_class: String,
     pub(crate) processes_class: String,
     pub(crate) services_class: String,
@@ -300,9 +388,19 @@ pub(crate) struct PanelTemplate {
     pub(crate) overview_path: String,
     pub(crate) processes_path: String,
     pub(crate) services_path: String,
+    pub(crate) services_running_path: String,
+    pub(crate) services_failed_path: String,
+    pub(crate) services_stopped_path: String,
+    pub(crate) services_all_path: String,
+    pub(crate) services_running_class: String,
+    pub(crate) services_failed_class: String,
+    pub(crate) services_stopped_class: String,
+    pub(crate) services_all_class: String,
     pub(crate) sites_path: String,
     pub(crate) ssl_path: String,
     pub(crate) update_path: String,
+    pub(crate) update_run_path: String,
+    pub(crate) certificate_issue_path: String,
     pub(crate) lang_zh_path: String,
     pub(crate) lang_en_path: String,
     pub(crate) logout_path: String,
@@ -322,6 +420,11 @@ pub(crate) struct PanelTemplate {
     pub(crate) ssl_info: SslInfo,
     pub(crate) has_certificates: bool,
     pub(crate) update_result: UpdateCheckResult,
+    pub(crate) update_job_status: JobStatus,
+    pub(crate) certificate_job_status: JobStatus,
+    pub(crate) has_flash: bool,
+    pub(crate) flash_class: String,
+    pub(crate) flash_message: String,
 }
 
 #[derive(Template)]

@@ -46,22 +46,22 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 install_nginx() {
-    if command -v nginx >/dev/null 2>&1; then
-        log "Nginx is already installed"
-        return
-    fi
-
     if command -v apt-get >/dev/null 2>&1; then
-        log "Installing Nginx and certbot with apt"
+        log "Installing Nginx, certbot, and certbot nginx plugin with apt"
         export DEBIAN_FRONTEND=noninteractive
         apt-get update
-        apt-get install -y nginx certbot
+        apt-get install -y nginx certbot python3-certbot-nginx
         return
     fi
 
     if command -v dnf >/dev/null 2>&1; then
-        log "Installing Nginx and certbot with dnf"
-        dnf install -y nginx certbot
+        log "Installing Nginx, certbot, and certbot nginx plugin with dnf"
+        dnf install -y nginx certbot python3-certbot-nginx
+        return
+    fi
+
+    if command -v nginx >/dev/null 2>&1 && command -v certbot >/dev/null 2>&1; then
+        log "Nginx and certbot are already installed"
         return
     fi
 
@@ -428,6 +428,7 @@ log "Creating RustPanel directories"
 install -d -o rustpanel -g rustpanel -m 0750 /var/lib/rustpanel
 install -d -o rustpanel -g rustpanel -m 0750 /var/log/rustpanel
 install -d -o rustpanel -g rustpanel -m 0750 /var/lib/rustpanel/acme
+install -d -o root -g rustpanel -m 0750 /var/lib/rustpanel/jobs
 install -d -o root -g rustpanel -m 0750 /etc/rustpanel
 install -d -o root -g rustpanel -m 0750 /etc/rustpanel/apps
 
@@ -456,8 +457,8 @@ log "Writing systemd unit"
 cat >/etc/systemd/system/rustpaneld.service <<UNIT
 [Unit]
 Description=RustPanel web daemon
-After=network-online.target
-Wants=network-online.target
+After=network-online.target rustpanel-helperd.service
+Wants=network-online.target rustpanel-helperd.service
 
 [Service]
 Type=simple
@@ -477,8 +478,38 @@ ReadWritePaths=/var/lib/rustpanel /var/log/rustpanel /etc/rustpanel
 WantedBy=multi-user.target
 UNIT
 
-log "Starting rustpaneld"
+cat >/etc/systemd/system/rustpanel-helperd.service <<UNIT
+[Unit]
+Description=RustPanel privileged helper
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/usr/local/bin/rustpanel-helper serve
+Restart=on-failure
+RestartSec=3
+RuntimeDirectory=rustpanel
+RuntimeDirectoryMode=0750
+UMask=0027
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+log "Starting RustPanel services"
 systemctl daemon-reload
-systemctl enable --now rustpaneld
+systemctl enable rustpanel-helperd rustpaneld
+if ! systemctl is-active --quiet rustpanel-helperd; then
+    systemctl start rustpanel-helperd
+fi
+if systemctl is-active --quiet rustpaneld; then
+    systemctl restart rustpaneld
+else
+    systemctl start rustpaneld
+fi
 
 print_access_info

@@ -8,3 +8,5 @@ license.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 rustpanel-core = { path = "../rustpanel-core" }
+serde.workspace = true
+serde_json.workspace = true

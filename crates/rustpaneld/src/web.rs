@@ -1,10 +1,13 @@
-use axum::{Router, routing::get};
+use axum::{
+    Router,
+    routing::{get, post},
+};
 use tower_http::trace::TraceLayer;
 
 use crate::{
     handlers::{
-        healthz, login_page, login_submit, logout, overview_page, processes_page, services_page,
-        sites_page, ssl_page, update_check_page,
+        certificate_issue_page, healthz, login_page, login_submit, logout, overview_page,
+        processes_page, services_page, sites_page, ssl_page, update_check_page, update_run_page,
     },
     state::AppState,
 };
@@ -19,7 +22,9 @@ pub(crate) fn router(base_path: &str, state: AppState) -> Router {
         .route("/services", get(services_page))
         .route("/sites", get(sites_page))
         .route("/ssl", get(ssl_page))
+        .route("/ssl/issue", post(certificate_issue_page))
         .route("/update-check", get(update_check_page))
+        .route("/update-run", post(update_run_page))
         .route("/healthz", get(healthz));
 
     let app = if base_path == "/" {
