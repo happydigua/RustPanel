@@ -32,7 +32,7 @@ crates/rustpanel-cli      CLI for setup, preview, and diagnostics
 ## One-command server install
 
 ```bash
-curl -fL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 --max-time 300 https://raw.githubusercontent.com/happydigua/RustPanel/main/scripts/bootstrap-linux.sh -o /tmp/rustpanel-bootstrap-linux.sh && sudo bash /tmp/rustpanel-bootstrap-linux.sh
+curl -fL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 --max-time 300 https://cnb.cool/qingdaoxin/rustpanel/-/git/raw/main/scripts/bootstrap-linux.sh -o /tmp/rustpanel-bootstrap-linux.sh && sudo bash /tmp/rustpanel-bootstrap-linux.sh
 ```
 
 The installer prints a server-IP based access URL:
@@ -56,10 +56,14 @@ Nginx plugin. Updates and certificate issuance can be started from the panel;
 the web daemon remains a normal `rustpanel` user and sends only whitelisted
 actions to `rustpanel-helperd`.
 
+CNB is used as the domestic mirror and release build path. The `.cnb.yml`
+pipeline builds Linux release binaries on tag push and uploads them as CNB
+Release attachments.
+
 For local-only install:
 
 ```bash
-curl -fL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 --max-time 300 https://raw.githubusercontent.com/happydigua/RustPanel/main/scripts/bootstrap-linux.sh -o /tmp/rustpanel-bootstrap-linux.sh && sudo bash /tmp/rustpanel-bootstrap-linux.sh --local
+curl -fL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 --max-time 300 https://cnb.cool/qingdaoxin/rustpanel/-/git/raw/main/scripts/bootstrap-linux.sh -o /tmp/rustpanel-bootstrap-linux.sh && sudo bash /tmp/rustpanel-bootstrap-linux.sh --local
 ```
 
 ## First vertical slice

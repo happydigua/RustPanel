@@ -1,0 +1,28 @@
+$:
+  tag_push:
+    - stages:
+        - name: Build Linux release binaries
+          image: rust:1-bookworm
+          script: |
+            set -euo pipefail
+            cargo build --release --locked
+            mkdir -p dist
+            tar -C target/release \
+              -czf dist/rustpanel-x86_64-unknown-linux-gnu.tar.gz \
+              rustpanel rustpaneld rustpanel-helper
+            sha256sum dist/rustpanel-x86_64-unknown-linux-gnu.tar.gz \
+              > dist/rustpanel-x86_64-unknown-linux-gnu.tar.gz.sha256
+
+        - name: Create CNB release
+          type: git:release
+          options:
+            title: $CNB_BRANCH
+            description: RustPanel Linux release binaries.
+            latest: true
+
+        - name: Upload release attachments
+          image: cnbcool/attachments:latest
+          settings:
+            attachments:
+              - "dist/*.tar.gz"
+              - "dist/*.sha256"
