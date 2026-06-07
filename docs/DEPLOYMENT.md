@@ -9,9 +9,9 @@ curl -fL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 --max
 ```
 
 This installs runtime dependencies, downloads prebuilt RustPanel Linux
-binaries, installs them into `/usr/local/bin`, enables
-`rustpaneld` and `rustpanel-helperd`, and prints login credentials plus a
-server-IP based URL:
+binaries from CNB Releases, verifies the `.sha256` checksum, installs them into
+`/usr/local/bin`, enables `rustpaneld` and `rustpanel-helperd`, and prints login
+credentials plus a server-IP based URL:
 
 ```text
 Username: admin
@@ -27,6 +27,9 @@ it with the public IP shown by your cloud provider.
 
 The one-command install uses prebuilt binaries. It does not install Rust on the
 server and does not compile the project on the server.
+
+The default binary source is CNB. To force GitHub Releases for debugging, run
+the installer with `RUSTPANEL_RELEASE_PROVIDER=github`.
 
 With the default install, RustPanel also installs Nginx, certbot, and the
 certbot Nginx plugin. Panel-triggered updates and certificate issuance go

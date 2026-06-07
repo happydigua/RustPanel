@@ -56,9 +56,11 @@ Nginx plugin. Updates and certificate issuance can be started from the panel;
 the web daemon remains a normal `rustpanel` user and sends only whitelisted
 actions to `rustpanel-helperd`.
 
-CNB is used as the domestic mirror and release build path. The `.cnb.yml`
-pipeline builds Linux release binaries on tag push and uploads them as CNB
-Release attachments.
+CNB is used as the default binary download source and release build path. The
+`.cnb.yml` pipeline builds Linux release binaries on tag push and uploads the
+archive plus its `.sha256` file as CNB Release attachments. Set
+`RUSTPANEL_RELEASE_PROVIDER=github` only if you explicitly want to download
+from GitHub Releases instead.
 
 For local-only install:
 

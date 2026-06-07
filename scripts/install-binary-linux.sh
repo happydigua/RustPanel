@@ -9,9 +9,13 @@ RUSTPANEL_ADMIN_USER="${RUSTPANEL_ADMIN_USER:-}"
 RUSTPANEL_ADMIN_PASSWORD="${RUSTPANEL_ADMIN_PASSWORD:-}"
 RUSTPANEL_SESSION_SECRET="${RUSTPANEL_SESSION_SECRET:-}"
 RUSTPANEL_VERSION="${RUSTPANEL_VERSION:-latest}"
+RUSTPANEL_CNB_REPO_SLUG="${RUSTPANEL_CNB_REPO_SLUG:-qingdaoxin/rustpanel}"
 RUSTPANEL_REPO_SLUG="${RUSTPANEL_REPO_SLUG:-happydigua/RustPanel}"
+RUSTPANEL_RELEASE_PROVIDER="${RUSTPANEL_RELEASE_PROVIDER:-cnb}"
 RUSTPANEL_BINARY_URL="${RUSTPANEL_BINARY_URL:-}"
+RUSTPANEL_BINARY_SHA256_URL="${RUSTPANEL_BINARY_SHA256_URL:-}"
 RUSTPANEL_DOWNLOAD_PROXY="${RUSTPANEL_DOWNLOAD_PROXY:-}"
+RUSTPANEL_VERIFY_CHECKSUM="${RUSTPANEL_VERIFY_CHECKSUM:-1}"
 
 log() {
     printf '[RustPanel] %s\n' "$*"
@@ -90,25 +94,93 @@ target_triple() {
 
 release_asset_url() {
     target="$1"
-    asset="rustpanel-${target}.tar.gz"
+    suffix="${2:-}"
+    asset="rustpanel-${target}.tar.gz${suffix}"
     url=""
 
+    if [ -n "$suffix" ] && [ -n "$RUSTPANEL_BINARY_SHA256_URL" ]; then
+        echo "$RUSTPANEL_BINARY_SHA256_URL"
+        return
+    fi
+
     if [ -n "$RUSTPANEL_BINARY_URL" ]; then
+        if [ -n "$suffix" ]; then
+            echo ""
+            return
+        fi
         echo "$RUSTPANEL_BINARY_URL"
         return
     fi
 
-    if [ "$RUSTPANEL_VERSION" = "latest" ]; then
-        url="https://github.com/${RUSTPANEL_REPO_SLUG}/releases/latest/download/${asset}"
-    else
-        url="https://github.com/${RUSTPANEL_REPO_SLUG}/releases/download/${RUSTPANEL_VERSION}/${asset}"
-    fi
+    case "$RUSTPANEL_RELEASE_PROVIDER" in
+        cnb)
+            if [ "$RUSTPANEL_VERSION" = "latest" ]; then
+                url="https://cnb.cool/${RUSTPANEL_CNB_REPO_SLUG}/-/releases/latest/download/${asset}"
+            else
+                url="https://cnb.cool/${RUSTPANEL_CNB_REPO_SLUG}/-/releases/download/${RUSTPANEL_VERSION}/${asset}"
+            fi
+            ;;
+        github)
+            if [ "$RUSTPANEL_VERSION" = "latest" ]; then
+                url="https://github.com/${RUSTPANEL_REPO_SLUG}/releases/latest/download/${asset}"
+            else
+                url="https://github.com/${RUSTPANEL_REPO_SLUG}/releases/download/${RUSTPANEL_VERSION}/${asset}"
+            fi
+            ;;
+        *)
+            echo "unknown release provider: ${RUSTPANEL_RELEASE_PROVIDER}" >&2
+            exit 2
+            ;;
+    esac
 
     if [ -n "$RUSTPANEL_DOWNLOAD_PROXY" ]; then
         echo "${RUSTPANEL_DOWNLOAD_PROXY%/}/${url}"
     else
         echo "$url"
     fi
+}
+
+download_file() {
+    url="$1"
+    destination="$2"
+
+    curl -fL \
+        --retry 5 \
+        --retry-all-errors \
+        --retry-delay 2 \
+        --connect-timeout 30 \
+        --max-time 300 \
+        -o "$destination" \
+        "$url"
+}
+
+verify_archive_checksum() {
+    archive="$1"
+    checksum_file="$2"
+
+    expected="$(awk '{ print $1; exit }' "$checksum_file")"
+    if [ -z "$expected" ]; then
+        echo "checksum file is empty or invalid" >&2
+        exit 1
+    fi
+
+    if command -v sha256sum >/dev/null 2>&1; then
+        actual="$(sha256sum "$archive" | awk '{ print $1 }')"
+    elif command -v shasum >/dev/null 2>&1; then
+        actual="$(shasum -a 256 "$archive" | awk '{ print $1 }')"
+    else
+        echo "sha256sum or shasum is required for checksum verification" >&2
+        exit 1
+    fi
+
+    if [ "$expected" != "$actual" ]; then
+        echo "checksum mismatch for RustPanel binary release" >&2
+        echo "expected: ${expected}" >&2
+        echo "actual:   ${actual}" >&2
+        exit 1
+    fi
+
+    log "Checksum verified"
 }
 
 download_and_install_binaries() {
@@ -124,8 +196,10 @@ download_and_install_binaries() {
 
     target="$(target_triple)"
     url="$(release_asset_url "$target")"
+    checksum_url="$(release_asset_url "$target" ".sha256")"
     tmp_dir="$(mktemp -d)"
     archive="${tmp_dir}/rustpanel.tar.gz"
+    checksum_file="${tmp_dir}/rustpanel.tar.gz.sha256"
 
     cleanup() {
         rm -rf "$tmp_dir"
@@ -133,17 +207,23 @@ download_and_install_binaries() {
     trap cleanup EXIT
 
     log "Downloading RustPanel binary: ${url}"
-    if ! curl -fL \
-        --retry 5 \
-        --retry-all-errors \
-        --retry-delay 2 \
-        --connect-timeout 30 \
-        --max-time 300 \
-        -o "$archive" \
-        "$url"; then
+    if ! download_file "$url" "$archive"; then
         echo "failed to download RustPanel binary release" >&2
         echo "check that a prebuilt RustPanel release exists for target ${target}" >&2
         exit 1
+    fi
+
+    if [ "$RUSTPANEL_VERIFY_CHECKSUM" != "0" ]; then
+        if [ -z "$checksum_url" ]; then
+            log "No checksum URL configured; skipping checksum verification"
+        else
+            log "Downloading checksum: ${checksum_url}"
+            if ! download_file "$checksum_url" "$checksum_file"; then
+                echo "failed to download RustPanel binary checksum" >&2
+                exit 1
+            fi
+            verify_archive_checksum "$archive" "$checksum_file"
+        fi
     fi
 
     tar -xzf "$archive" -C "$tmp_dir"
