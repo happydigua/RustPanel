@@ -119,7 +119,14 @@ download_and_install_binaries() {
     trap cleanup EXIT
 
     log "Downloading RustPanel binary: ${url}"
-    if ! curl -fL --retry 3 --connect-timeout 20 -o "$archive" "$url"; then
+    if ! curl -fL \
+        --retry 5 \
+        --retry-all-errors \
+        --retry-delay 2 \
+        --connect-timeout 30 \
+        --max-time 300 \
+        -o "$archive" \
+        "$url"; then
         echo "failed to download RustPanel binary release" >&2
         echo "check that a GitHub Release exists for target ${target}" >&2
         exit 1

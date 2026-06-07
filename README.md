@@ -32,7 +32,7 @@ crates/rustpanel-cli      CLI for setup, preview, and diagnostics
 ## One-command server install
 
 ```bash
-curl -fL --connect-timeout 15 --max-time 120 https://raw.githubusercontent.com/happydigua/RustPanel/main/scripts/bootstrap-linux.sh -o /tmp/rustpanel-bootstrap-linux.sh && sudo bash /tmp/rustpanel-bootstrap-linux.sh
+curl -fL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 --max-time 300 https://raw.githubusercontent.com/happydigua/RustPanel/main/scripts/bootstrap-linux.sh -o /tmp/rustpanel-bootstrap-linux.sh && sudo bash /tmp/rustpanel-bootstrap-linux.sh
 ```
 
 The installer prints a server-IP based access URL:
@@ -59,7 +59,7 @@ actions to `rustpanel-helperd`.
 For local-only install:
 
 ```bash
-curl -fL --connect-timeout 15 --max-time 120 https://raw.githubusercontent.com/happydigua/RustPanel/main/scripts/bootstrap-linux.sh -o /tmp/rustpanel-bootstrap-linux.sh && sudo bash /tmp/rustpanel-bootstrap-linux.sh --local
+curl -fL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 --max-time 300 https://raw.githubusercontent.com/happydigua/RustPanel/main/scripts/bootstrap-linux.sh -o /tmp/rustpanel-bootstrap-linux.sh && sudo bash /tmp/rustpanel-bootstrap-linux.sh --local
 ```
 
 ## First vertical slice

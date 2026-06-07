@@ -29,10 +29,10 @@ for arg in "$@"; do
             RUSTPANEL_VERSION="${arg#*=}"
             ;;
         --help|-h)
-            echo "Usage: curl -fL --connect-timeout 15 --max-time 120 https://raw.githubusercontent.com/happydigua/RustPanel/main/scripts/bootstrap-linux.sh -o /tmp/rustpanel-bootstrap-linux.sh && sudo bash /tmp/rustpanel-bootstrap-linux.sh"
-            echo "       curl -fL --connect-timeout 15 --max-time 120 https://raw.githubusercontent.com/happydigua/RustPanel/main/scripts/bootstrap-linux.sh -o /tmp/rustpanel-bootstrap-linux.sh && sudo bash /tmp/rustpanel-bootstrap-linux.sh --minimal"
-            echo "       curl -fL --connect-timeout 15 --max-time 120 https://raw.githubusercontent.com/happydigua/RustPanel/main/scripts/bootstrap-linux.sh -o /tmp/rustpanel-bootstrap-linux.sh && sudo bash /tmp/rustpanel-bootstrap-linux.sh --local"
-            echo "       curl -fL --connect-timeout 15 --max-time 120 https://raw.githubusercontent.com/happydigua/RustPanel/main/scripts/bootstrap-linux.sh -o /tmp/rustpanel-bootstrap-linux.sh && sudo bash /tmp/rustpanel-bootstrap-linux.sh --version=v0.1.5"
+            echo "Usage: curl -fL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 --max-time 300 https://raw.githubusercontent.com/happydigua/RustPanel/main/scripts/bootstrap-linux.sh -o /tmp/rustpanel-bootstrap-linux.sh && sudo bash /tmp/rustpanel-bootstrap-linux.sh"
+            echo "       curl -fL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 --max-time 300 https://raw.githubusercontent.com/happydigua/RustPanel/main/scripts/bootstrap-linux.sh -o /tmp/rustpanel-bootstrap-linux.sh && sudo bash /tmp/rustpanel-bootstrap-linux.sh --minimal"
+            echo "       curl -fL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 --max-time 300 https://raw.githubusercontent.com/happydigua/RustPanel/main/scripts/bootstrap-linux.sh -o /tmp/rustpanel-bootstrap-linux.sh && sudo bash /tmp/rustpanel-bootstrap-linux.sh --local"
+            echo "       curl -fL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 --max-time 300 https://raw.githubusercontent.com/happydigua/RustPanel/main/scripts/bootstrap-linux.sh -o /tmp/rustpanel-bootstrap-linux.sh && sudo bash /tmp/rustpanel-bootstrap-linux.sh --version=v0.1.6"
             exit 0
             ;;
         *)
@@ -68,17 +68,36 @@ install_runtime_dependencies() {
     exit 1
 }
 
+download_url() {
+    url="$1"
+    destination="$2"
+
+    curl -fL \
+        --retry 5 \
+        --retry-all-errors \
+        --retry-delay 2 \
+        --connect-timeout 30 \
+        --max-time 300 \
+        "$url" \
+        -o "$destination"
+}
+
+installer=""
+
 download_installer() {
-    tmp_installer="$(mktemp /tmp/rustpanel-install-binary.XXXXXX.sh)"
-    log "Downloading binary installer" >&2
-    curl -fL --connect-timeout 15 --max-time 120 "$INSTALL_SCRIPT_URL" -o "$tmp_installer"
-    chmod 0755 "$tmp_installer"
-    echo "$tmp_installer"
+    installer="$(mktemp /tmp/rustpanel-install-binary.XXXXXX.sh)"
+    log "Downloading binary installer"
+    if ! download_url "$INSTALL_SCRIPT_URL" "$installer"; then
+        rm -f "$installer"
+        echo "failed to download RustPanel binary installer" >&2
+        exit 1
+    fi
+    chmod 0755 "$installer"
 }
 
 log "Bootstrap started"
 install_runtime_dependencies
-installer="$(download_installer)"
+download_installer
 trap 'rm -f "$installer"' EXIT
 
 install_args=("--version=${RUSTPANEL_VERSION}")
