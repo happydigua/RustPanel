@@ -4,7 +4,7 @@ $:
         - name: Build Linux release binaries
           image: rust:1-bookworm
           script: |
-            set -euo pipefail
+            set -eu
             cargo build --release --locked
             mkdir -p dist
             tar -C target/release \

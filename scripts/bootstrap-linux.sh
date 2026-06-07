@@ -32,7 +32,7 @@ for arg in "$@"; do
             echo "Usage: curl -fL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 --max-time 300 https://cnb.cool/qingdaoxin/rustpanel/-/git/raw/main/scripts/bootstrap-linux.sh -o /tmp/rustpanel-bootstrap-linux.sh && sudo bash /tmp/rustpanel-bootstrap-linux.sh"
             echo "       curl -fL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 --max-time 300 https://cnb.cool/qingdaoxin/rustpanel/-/git/raw/main/scripts/bootstrap-linux.sh -o /tmp/rustpanel-bootstrap-linux.sh && sudo bash /tmp/rustpanel-bootstrap-linux.sh --minimal"
             echo "       curl -fL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 --max-time 300 https://cnb.cool/qingdaoxin/rustpanel/-/git/raw/main/scripts/bootstrap-linux.sh -o /tmp/rustpanel-bootstrap-linux.sh && sudo bash /tmp/rustpanel-bootstrap-linux.sh --local"
-            echo "       curl -fL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 --max-time 300 https://cnb.cool/qingdaoxin/rustpanel/-/git/raw/main/scripts/bootstrap-linux.sh -o /tmp/rustpanel-bootstrap-linux.sh && sudo bash /tmp/rustpanel-bootstrap-linux.sh --version=v0.1.8"
+            echo "       curl -fL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 --max-time 300 https://cnb.cool/qingdaoxin/rustpanel/-/git/raw/main/scripts/bootstrap-linux.sh -o /tmp/rustpanel-bootstrap-linux.sh && sudo bash /tmp/rustpanel-bootstrap-linux.sh --version=v0.1.9"
             exit 0
             ;;
         *)

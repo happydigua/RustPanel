@@ -8,8 +8,8 @@ This is the current deployment flow for lightweight Linux servers.
 curl -fL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 --max-time 300 https://cnb.cool/qingdaoxin/rustpanel/-/git/raw/main/scripts/bootstrap-linux.sh -o /tmp/rustpanel-bootstrap-linux.sh && sudo bash /tmp/rustpanel-bootstrap-linux.sh
 ```
 
-This installs runtime dependencies, downloads RustPanel Linux binaries from the
-latest GitHub Release, installs them into `/usr/local/bin`, enables
+This installs runtime dependencies, downloads prebuilt RustPanel Linux
+binaries, installs them into `/usr/local/bin`, enables
 `rustpaneld` and `rustpanel-helperd`, and prints login credentials plus a
 server-IP based URL:
 

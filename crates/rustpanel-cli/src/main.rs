@@ -15,7 +15,7 @@ use serde::Deserialize;
 const DEFAULT_RELEASE_API_URL: &str =
     "https://api.github.com/repos/happydigua/RustPanel/releases/latest";
 const DEFAULT_BOOTSTRAP_URL: &str =
-    "https://raw.githubusercontent.com/happydigua/RustPanel/main/scripts/bootstrap-linux.sh";
+    "https://cnb.cool/qingdaoxin/rustpanel/-/git/raw/main/scripts/bootstrap-linux.sh";
 
 #[derive(Debug, Parser)]
 #[command(name = "rustpanel")]
@@ -30,7 +30,7 @@ enum Command {
     /// Print the installed CLI version.
     Version,
 
-    /// Check whether the installed binary is behind the latest GitHub Release.
+    /// Check whether the installed binary is behind the latest release.
     UpdateCheck {
         #[arg(long, default_value = DEFAULT_RELEASE_API_URL)]
         release_api_url: String,

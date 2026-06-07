@@ -142,7 +142,7 @@ download_and_install_binaries() {
         -o "$archive" \
         "$url"; then
         echo "failed to download RustPanel binary release" >&2
-        echo "check that a GitHub Release exists for target ${target}" >&2
+        echo "check that a prebuilt RustPanel release exists for target ${target}" >&2
         exit 1
     fi
 
