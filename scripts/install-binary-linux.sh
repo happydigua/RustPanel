@@ -10,6 +10,8 @@ RUSTPANEL_ADMIN_PASSWORD="${RUSTPANEL_ADMIN_PASSWORD:-}"
 RUSTPANEL_SESSION_SECRET="${RUSTPANEL_SESSION_SECRET:-}"
 RUSTPANEL_VERSION="${RUSTPANEL_VERSION:-latest}"
 RUSTPANEL_REPO_SLUG="${RUSTPANEL_REPO_SLUG:-happydigua/RustPanel}"
+RUSTPANEL_BINARY_URL="${RUSTPANEL_BINARY_URL:-}"
+RUSTPANEL_DOWNLOAD_PROXY="${RUSTPANEL_DOWNLOAD_PROXY:-}"
 
 log() {
     printf '[RustPanel] %s\n' "$*"
@@ -89,11 +91,23 @@ target_triple() {
 release_asset_url() {
     target="$1"
     asset="rustpanel-${target}.tar.gz"
+    url=""
+
+    if [ -n "$RUSTPANEL_BINARY_URL" ]; then
+        echo "$RUSTPANEL_BINARY_URL"
+        return
+    fi
 
     if [ "$RUSTPANEL_VERSION" = "latest" ]; then
-        echo "https://github.com/${RUSTPANEL_REPO_SLUG}/releases/latest/download/${asset}"
+        url="https://github.com/${RUSTPANEL_REPO_SLUG}/releases/latest/download/${asset}"
     else
-        echo "https://github.com/${RUSTPANEL_REPO_SLUG}/releases/download/${RUSTPANEL_VERSION}/${asset}"
+        url="https://github.com/${RUSTPANEL_REPO_SLUG}/releases/download/${RUSTPANEL_VERSION}/${asset}"
+    fi
+
+    if [ -n "$RUSTPANEL_DOWNLOAD_PROXY" ]; then
+        echo "${RUSTPANEL_DOWNLOAD_PROXY%/}/${url}"
+    else
+        echo "$url"
     fi
 }
 
